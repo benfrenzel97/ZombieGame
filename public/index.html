@@ -256,10 +256,23 @@ let currentWeapon=0;
 const keys={};
 const mouse={x:0,y:0,wx:0,wy:0,left:false,right:false};
 
+function isLobbyOpen(){
+  const l=document.getElementById('lobby');
+  return l&&l.style.display!=='none'&&l.offsetParent!==null;
+}
+
 window.addEventListener('keydown',e=>{
+  // If lobby is visible, let ALL keystrokes pass through to input fields unmodified
+  if(isLobbyOpen()) return;
+
   if(chatOpen){
     if(e.key==='Escape'){closeChatInput();e.preventDefault();}
     if(e.key==='Enter'){sendChat();e.preventDefault();}
+    return;
+  }
+  // Menu open — only ESC closes it, nothing else
+  if(menuOpen){
+    if(e.key==='Escape'){toggleMenu();e.preventDefault();}
     return;
   }
   keys[e.key.toLowerCase()]=true;
@@ -273,7 +286,11 @@ window.addEventListener('keydown',e=>{
   if(e.key==='r'||e.key==='R'){if(socket)socket.emit('input',{...lastInput,reloadReq:true});}
   e.preventDefault();
 });
-window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+window.addEventListener('keyup',e=>{
+  // Don't clear keys during lobby or menu
+  if(isLobbyOpen()||menuOpen) return;
+  keys[e.key.toLowerCase()]=false;
+});
 canvas.addEventListener('mousemove',e=>{
   mouse.x=e.clientX;mouse.y=e.clientY;
   mouse.wx=e.clientX+camera.x;mouse.wy=e.clientY+camera.y;
@@ -322,7 +339,7 @@ document.getElementById('menuLeaveBtn').onclick=()=>{if(socket)socket.disconnect
 // ─── Input loop ───────────────────────────────────────────────────────────────
 let lastInput={};
 function gatherInput(){
-  if(!myPlayer||menuOpen||chatOpen)return;
+  if(!myPlayer||menuOpen||chatOpen||isLobbyOpen())return;
   let dx=0,dy=0;
   if(keys['a']||keys['arrowleft'])dx-=1;
   if(keys['d']||keys['arrowright'])dx+=1;
