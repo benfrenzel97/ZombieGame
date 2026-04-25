@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zombie Survival</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:'Courier New',monospace;cursor:default;}
+#gameCanvas{display:block;position:absolute;top:0;left:0;cursor:none;}
+#gameCanvas.lobby-active{pointer-events:none;cursor:default;}
+#minimap{position:absolute;top:12px;right:12px;border:1px solid #2a2a3a;border-radius:4px;background:rgba(0,0,0,0.7);pointer-events:none;}
+
+/* ── BOTTOM HUD ── */
+#hud{position:absolute;bottom:0;left:0;width:100%;pointer-events:none;}
+#hudBar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 20px 14px;
+  background:linear-gradient(to top,rgba(0,0,0,0.9),rgba(0,0,0,0.6));
+  border-top:1px solid #1a1a2a;
+}
+/* Left — health & stamina */
+#hudLeft{display:flex;flex-direction:column;gap:5px;min-width:180px;}
+.barRow{display:flex;align-items:center;gap:8px;}
+.barLabel{font-size:9px;color:#555;letter-spacing:1px;width:22px;text-transform:uppercase;}
+.barTrack{flex:1;height:8px;background:#111;border-radius:4px;overflow:hidden;}
+.barFill{height:100%;border-radius:4px;transition:width 0.1s;}
+#hpFill{background:#4e4;}
+#staminaFill{background:#48f;width:100%;}
+#hudLeftStats{display:flex;gap:16px;margin-top:4px;}
+.hstat{font-size:10px;color:#555;letter-spacing:1px;}
+.hstat span{color:#ccc;font-size:13px;font-weight:bold;}
+
+/* Center — weapon slots */
+#hudCenter{display:flex;gap:12px;align-items:flex-end;}
+.wslot{
+  padding:8px 16px;background:rgba(255,255,255,0.04);
+  border:1px solid #2a2a3a;border-radius:6px;
+  text-align:center;min-width:110px;position:relative;
+  transition:border-color 0.15s,background 0.15s;
+}
+.wslot.active{border-color:#fa0;background:rgba(40,30,0,0.7);}
+.wslot.empty{opacity:0.35;}
+.wslot .wname{font-size:11px;color:#888;letter-spacing:1px;text-transform:uppercase;}
+.wslot.active .wname{color:#fa0;}
+.wslot .wammo{font-size:20px;font-weight:bold;color:#eee;line-height:1.1;margin:4px 0 2px;}
+.wslot .wreserve{font-size:10px;color:#555;}
+.wslot.active .wreserve{color:#888;}
+.wslot .wkey{position:absolute;top:4px;left:6px;font-size:9px;color:#333;}
+.wslot.active .wkey{color:#fa0;}
+/* reload bar inside slot */
+.wslot .reloadTrack{height:3px;background:#222;border-radius:2px;margin-top:4px;display:none;}
+.wslot .reloadFill{height:100%;border-radius:2px;background:#fa0;width:0%;}
+
+/* Right — day/timer/kills */
+#hudRight{display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:120px;}
+#phaseLabel{font-size:13px;font-weight:bold;color:#fa0;letter-spacing:1px;}
+#timerLabel{font-size:10px;color:#555;}
+#killLabel{font-size:10px;color:#555;margin-top:4px;}
+#killLabel span{color:#e44;font-size:13px;font-weight:bold;}
+
+/* ── OVERLAYS ── */
+#pickupPrompt{
+  position:absolute;bottom:100px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,0.8);border:1px solid #fa0;border-radius:5px;
+  color:#fa0;font-size:12px;padding:6px 16px;letter-spacing:1px;
+  display:none;pointer-events:none;text-align:center;
+}
+#locLabel{
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  font-size:10px;color:#666;background:rgba(0,0,0,0.5);
+  padding:3px 12px;border-radius:3px;letter-spacing:1px;pointer-events:none;
+}
+#lootLabel{
+  position:absolute;top:32px;left:50%;transform:translateX(-50%);
+  font-size:11px;color:#fa0;background:rgba(40,30,0,0.85);
+  padding:4px 14px;border-radius:4px;border:1px solid #fa0;
+  display:none;pointer-events:none;letter-spacing:1px;
+}
+#hordeAlert{
+  position:absolute;top:36%;left:50%;transform:translate(-50%,-50%);
+  background:rgba(160,20,20,0.95);color:#fff;
+  padding:16px 36px;font-size:20px;font-weight:bold;
+  border-radius:6px;letter-spacing:2px;display:none;text-align:center;
+  border:1px solid #f44;transition:all 0.6s ease;z-index:50;pointer-events:none;
+}
+#hordeAlert.shrunk{
+  top:48px;left:auto;right:170px;transform:none;
+  padding:5px 12px;font-size:10px;letter-spacing:1px;border-radius:10px;
+}
+#nightOverlay{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  pointer-events:none;transition:background 3s;
+}
+#chatBox{position:absolute;bottom:110px;left:16px;width:280px;pointer-events:none;}
+#chatMessages{display:flex;flex-direction:column;gap:3px;margin-bottom:6px;max-height:100px;overflow:hidden;}
+.chatMsg{font-size:11px;color:#ccc;background:rgba(0,0,0,0.55);padding:3px 8px;border-radius:3px;border-left:2px solid #333;}
+.chatMsg .cn{color:#4af;font-weight:bold;}
+#chatInput{width:100%;padding:6px 10px;background:rgba(0,0,0,0.85);border:1px solid #444;border-radius:4px;color:#eee;font-size:12px;font-family:monospace;outline:none;display:none;pointer-events:all;}
+#chatInput:focus{border-color:#4af;}
+#chatHint{font-size:9px;color:#333;margin-top:2px;}
+
+/* ── OVERLAYS (lobby/death/score/menu) ── */
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#eee;pointer-events:all;cursor:default;z-index:100;}
+.overlay h1{font-size:30px;letter-spacing:4px;}
+.oInput{width:100%;max-width:300px;padding:10px 14px;background:rgba(255,255,255,0.07);border:1px solid #333;border-radius:5px;color:#eee;font-size:14px;font-family:monospace;outline:none;}
+.oInput:focus{border-color:#4e4;}
+.oBtn{width:100%;max-width:300px;padding:11px;border:none;border-radius:5px;font-size:14px;font-family:monospace;cursor:pointer;letter-spacing:1px;}
+.oBtn.green{background:#1e5a1e;color:#aaffaa;} .oBtn.green:hover{background:#2a6a2a;}
+.oBtn.red{background:#5a1e1e;color:#ffaaaa;}   .oBtn.red:hover{background:#6a2a2a;}
+.oBtn.gray{background:#222;color:#888;}          .oBtn.gray:hover{background:#333;}
+.oInfo{font-size:11px;color:#444;text-align:center;line-height:1.9;}
+#respawnBarWrap{display:flex;flex-direction:column;align-items:center;gap:6px;}
+#respawnLabel{font-size:12px;color:#e44;}
+#respawnBar{width:240px;height:6px;background:#1a1a1a;border-radius:3px;}
+#respawnFill{height:100%;border-radius:3px;background:#e44;width:100%;}
+#scoreTable{width:100%;max-width:400px;border-collapse:collapse;}
+#scoreTable th{font-size:10px;color:#444;padding:4px 12px;text-align:left;border-bottom:1px solid #1a1a1a;letter-spacing:1px;}
+#scoreTable td{font-size:13px;color:#ccc;padding:6px 12px;}
+#scoreBarWrap{width:200px;height:3px;background:#1a1a1a;border-radius:2px;}
+#scoreFill{height:100%;border-radius:2px;background:#fa0;width:100%;}
+/* Menu */
+#menuOverlay{display:none;z-index:200;}
+#menuOverlay h1{color:#4af;font-size:22px;margin-bottom:4px;}
+.msection{width:100%;max-width:440px;background:rgba(255,255,255,0.03);border:1px solid #1a1a2a;border-radius:6px;padding:12px 16px;margin:0;}
+.msection h2{font-size:10px;color:#444;letter-spacing:2px;margin-bottom:8px;text-transform:uppercase;}
+.lrow{display:flex;align-items:center;gap:10px;margin:4px 0;font-size:11px;color:#888;}
+.ldot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.ctrlGrid{display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;font-size:11px;color:#666;line-height:2;}
+#menuScoreTable{width:100%;font-size:11px;color:#888;border-collapse:collapse;}
+#menuScoreTable th{text-align:left;padding:2px 8px;font-size:9px;color:#444;letter-spacing:1px;}
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<canvas id="minimap" width="140" height="140"></canvas>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="hudBar">
+    <div id="hudLeft">
+      <div class="barRow">
+        <span class="barLabel">HP</span>
+        <div class="barTrack" style="width:160px"><div class="barFill" id="hpFill" style="width:100%"></div></div>
+        <span id="hpNum" style="font-size:11px;color:#888;min-width:32px">100</span>
+      </div>
+      <div class="barRow">
+        <span class="barLabel">STM</span>
+        <div class="barTrack" style="width:160px"><div class="barFill" id="staminaFill"></div></div>
+      </div>
+      <div id="hudLeftStats">
+        <div class="hstat">KILLS <span id="killVal">0</span></div>
+        <div class="hstat">WOOD <span id="woodVal">0</span></div>
+      </div>
+    </div>
+
+    <div id="hudCenter">
+      <div class="wslot active" id="ws0">
+        <div class="wkey">Q/SCROLL</div>
+        <div class="wname" id="wn0">Pistol</div>
+        <div class="wammo" id="wa0">12</div>
+        <div class="wreserve" id="wr0">/ 36 reserve</div>
+        <div class="reloadTrack" id="rt0"><div class="reloadFill" id="rf0"></div></div>
+      </div>
+      <div class="wslot empty" id="ws1">
+        <div class="wkey">Q/SCROLL</div>
+        <div class="wname" id="wn1">— EMPTY —</div>
+        <div class="wammo" id="wa1" style="font-size:13px;color:#444">F to pick up</div>
+        <div class="wreserve" id="wr1"></div>
+        <div class="reloadTrack" id="rt1"><div class="reloadFill" id="rf1"></div></div>
+      </div>
+    </div>
+
+    <div id="hudRight">
+      <div id="phaseLabel">☀ DAY 1</div>
+      <div id="timerLabel">Horde in: —</div>
+    </div>
+  </div>
+</div>
+
+<div id="locLabel">CENTRAL BASE</div>
+<div id="lootLabel">⚠ LOOT ROOM</div>
+<div id="pickupPrompt"></div>
+<div id="hordeAlert">⚠ HORDE NIGHT ⚠<br><span style="font-size:13px;font-weight:normal">DEFEND THE BASE!</span></div>
+<div id="nightOverlay"></div>
+<div id="chatBox">
+  <div id="chatMessages"></div>
+  <input id="chatInput" placeholder="Press T to chat…" maxlength="80">
+  <div id="chatHint">T·Chat &nbsp; RMB·Ping &nbsp; F·Pick up weapon &nbsp; B·Build &nbsp; ESC·Menu</div>
+</div>
+
+<!-- LOBBY -->
+<div class="overlay" id="lobby">
+  <h1 style="color:#4e4">🧟 ZOMBIE SURVIVAL</h1>
+  <p class="oInfo">Multiplayer · PC · Up to 6 players<br>Share your room code with friends</p>
+  <input class="oInput" id="nameInput" placeholder="Your name" maxlength="16" autocomplete="off">
+  <input class="oInput" id="roomInput" placeholder="Room code (e.g. alpha)" maxlength="20" autocomplete="off">
+  <button class="oBtn green" id="joinBtn">JOIN GAME</button>
+  <p class="oInfo" id="connStatus">Not connected</p>
+</div>
+
+<!-- DEATH -->
+<div class="overlay" id="deathScreen" style="display:none;">
+  <h1 style="color:#e44">YOU DIED</h1>
+  <p id="deathInfo" style="color:#555;font-size:13px"></p>
+  <div id="respawnBarWrap">
+    <span id="respawnLabel">Respawning…</span>
+    <div id="respawnBar"><div id="respawnFill"></div></div>
+  </div>
+</div>
+
+<!-- SCORE -->
+<div class="overlay" id="scoreScreen" style="display:none;">
+  <h1 style="color:#fa0">NIGHT SURVIVED</h1>
+  <table id="scoreTable">
+    <thead><tr><th>#</th><th>PLAYER</th><th>NIGHT KILLS</th><th>TOTAL</th></tr></thead>
+    <tbody id="scoreTbody"></tbody>
+  </table>
+  <p style="font-size:10px;color:#444">Next day starting…</p>
+  <div id="scoreBarWrap"><div id="scoreFill"></div></div>
+</div>
+
+<!-- MENU -->
+<div class="overlay" id="menuOverlay">
+  <h1>MENU</h1>
+  <div class="msection">
+    <h2>Controls</h2>
+    <div class="ctrlGrid">
+      <span>WASD · Move</span><span>Shift · Sprint</span>
+      <span>Mouse · Aim</span><span>Click · Shoot</span>
+      <span>Q / Scroll · Swap slot</span><span>F · Pick up weapon</span>
+      <span>R · Reload</span><span>B · Build mode</span>
+      <span>RMB · Ping map</span><span>T · Chat</span>
+      <span>ESC · This menu</span><span></span>
+    </div>
+  </div>
+  <div class="msection">
+    <h2>Drop Legend</h2>
+    <div class="lrow"><div class="ldot" style="background:#4f4"></div>Green + · Med Kit — restores HP</div>
+    <div class="lrow"><div class="ldot" style="background:#a84"></div>Brown W · Wood — 3 = 1 barricade</div>
+    <div class="lrow"><div class="ldot" style="background:#ff9;border-radius:2px;width:18px;height:10px"></div>Pistol on ground</div>
+    <div class="lrow"><div class="ldot" style="background:#fa4;border-radius:2px;width:22px;height:10px"></div>Shotgun on ground</div>
+    <div class="lrow"><div class="ldot" style="background:#4ff;border-radius:2px;width:26px;height:8px"></div>Rifle on ground</div>
+    <div class="lrow"><div class="ldot" style="background:#f4f;border-radius:2px;width:16px;height:10px"></div>SMG on ground</div>
+    <div class="lrow"><div class="ldot" style="background:#fa0;border-radius:2px"></div>Gold border room · Loot room — rare gear</div>
+  </div>
+  <div class="msection">
+    <h2>Live Scoreboard</h2>
+    <table id="menuScoreTable">
+      <thead><tr><th>PLAYER</th><th>KILLS</th><th>HP</th><th>SLOT 1</th><th>SLOT 2</th></tr></thead>
+      <tbody id="menuScoreTbody"></tbody>
+    </table>
+  </div>
+  <button class="oBtn green" id="menuResumeBtn" style="max-width:180px">RESUME</button>
+  <button class="oBtn red"   id="menuLeaveBtn"  style="max-width:180px">LEAVE MATCH</button>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+//  ZOMBIE SURVIVAL — Client v3 (Phase 2)
+//  Cone of vision, day/night lighting, 2-slot weapons, ground weapons
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+const mmCanvas=document.getElementById('minimap');
+const mctx=mmCanvas.getContext('2d');
+
+let W,H;
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+resize();window.addEventListener('resize',resize);
+
+const TILE=40,MAP_W=150,MAP_H=150,TICK=20;
+const T_WALL=0,T_FLOOR=1,T_COURT=2,T_BASE=3,T_LOOT=4;
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let socket=null,myId=null,tiles=null,lootRooms=[];
+let mapInfo={CX:75,CY:75,bx1:65,bx2:85,by1:65,by2:85};
+let gameState={players:[],zombies:[],bullets:[],barricades:[],groundWeapons:[],pickups:[],
+  day:1,dayTimer:0,phase:'day',scoreTimer:0};
+let localBarricades=[],localGroundWeapons=[],localPickups=[];
+let camera={x:0,y:0};
+let particles=[],screamerPulses=[],pings=[];
+let myPlayer=null;
+let menuOpen=false,chatOpen=false;
+let buildMode=false;
+let hordeAlertActive=false;
+
+// ─── Lighting state ───────────────────────────────────────────────────────────
+// phase: 'day' | 'dusk' | 'night' | 'dawn'
+// We compute a 0-1 darkness value client-side based on server dayTimer
+const DUSK_START = TICK*30; // last 30s of day = dusk
+let lightLevel=0; // 0=full day, 1=full night
+
+// ─── Input ────────────────────────────────────────────────────────────────────
+const keys={};
+const mouse={x:0,y:0,wx:0,wy:0,left:false};
+
+function isLobbyOpen(){
+  const l=document.getElementById('lobby');
+  return l&&l.style.display!=='none'&&l.offsetParent!==null;
+}
+
+window.addEventListener('keydown',e=>{
+  if(isLobbyOpen())return;
+  if(chatOpen){
+    if(e.key==='Escape'){closeChatInput();e.preventDefault();}
+    if(e.key==='Enter'){sendChat();e.preventDefault();}
+    return;
+  }
+  if(menuOpen){if(e.key==='Escape'){toggleMenu();e.preventDefault();}return;}
+  keys[e.key.toLowerCase()]=true;
+  if(e.key==='Escape'){toggleMenu();e.preventDefault();return;}
+  if(e.key==='t'||e.key==='T'){openChatInput();e.preventDefault();return;}
+  if(e.key==='q'||e.key==='Q'){sendSwapSlot();}
+  if(e.key==='f'||e.key==='F'){if(socket)socket.emit('pickup');}
+  if(e.key==='b'||e.key==='B'){buildMode=!buildMode;}
+  if(e.key==='r'||e.key==='R'){if(socket)socket.emit('input',{...lastInput,reloadReq:true});}
+  e.preventDefault();
+});
+window.addEventListener('keyup',e=>{
+  if(isLobbyOpen()||menuOpen)return;
+  keys[e.key.toLowerCase()]=false;
+});
+canvas.addEventListener('mousemove',e=>{
+  mouse.x=e.clientX;mouse.y=e.clientY;
+  mouse.wx=e.clientX+camera.x;mouse.wy=e.clientY+camera.y;
+});
+canvas.addEventListener('mousedown',e=>{
+  if(e.button===0)mouse.left=true;
+  if(e.button===2){if(socket&&myPlayer)socket.emit('ping',{wx:mouse.wx,wy:mouse.wy});e.preventDefault();}
+});
+canvas.addEventListener('mouseup',e=>{if(e.button===0)mouse.left=false;});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('click',e=>{
+  if(buildMode&&myPlayer&&socket){
+    socket.emit('build',{tx:Math.floor(mouse.wx/TILE),ty:Math.floor(mouse.wy/TILE)});
+  }
+});
+// Scroll wheel = swap slot
+canvas.addEventListener('wheel',e=>{sendSwapSlot();e.preventDefault();},{passive:false});
+
+function sendSwapSlot(){if(socket)socket.emit('input',{...lastInput,swapSlot:true});}
+
+// Chat
+function openChatInput(){chatOpen=true;const ci=document.getElementById('chatInput');ci.style.display='block';ci.focus();}
+function closeChatInput(){chatOpen=false;const ci=document.getElementById('chatInput');ci.style.display='none';ci.value='';}
+function sendChat(){const msg=document.getElementById('chatInput').value.trim();if(msg&&socket)socket.emit('chat',msg);closeChatInput();}
+
+// Menu
+function toggleMenu(){
+  menuOpen=!menuOpen;
+  document.getElementById('menuOverlay').style.display=menuOpen?'flex':'none';
+  if(menuOpen)updateMenuScoreboard();
+}
+function updateMenuScoreboard(){
+  const tb=document.getElementById('menuScoreTbody');tb.innerHTML='';
+  for(const p of gameState.players){
+    const s0=p.slots?.[0],s1=p.slots?.[1];
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td style="color:${p.id===myId?'#4af':'#888'};padding:3px 8px">${p.name}</td>
+      <td style="text-align:center;padding:3px 8px">${p.kills}</td>
+      <td style="text-align:center;padding:3px 8px">${p.alive?p.hp:'💀'}</td>
+      <td style="padding:3px 8px;color:#666;font-size:10px">${s0?s0.name:'—'}</td>
+      <td style="padding:3px 8px;color:#666;font-size:10px">${s1?s1.name:'—'}</td>`;
+    tb.appendChild(tr);
+  }
+}
+document.getElementById('menuResumeBtn').onclick=()=>toggleMenu();
+document.getElementById('menuLeaveBtn').onclick=()=>{if(socket)socket.disconnect();location.reload();};
+
+// ─── Input gathering ──────────────────────────────────────────────────────────
+let lastInput={};
+function gatherInput(){
+  if(!myPlayer||menuOpen||chatOpen||isLobbyOpen())return;
+  let dx=0,dy=0;
+  if(keys['a']||keys['arrowleft'])dx-=1;
+  if(keys['d']||keys['arrowright'])dx+=1;
+  if(keys['w']||keys['arrowup'])dy-=1;
+  if(keys['s']||keys['arrowdown'])dy+=1;
+  const ang=myPlayer?Math.atan2(mouse.wy-myPlayer.y,mouse.wx-myPlayer.x):0;
+  const inp={dx,dy,angle:ang,shooting:mouse.left&&!buildMode,sprinting:!!keys['shift'],swapSlot:false,reloadReq:false};
+  if(JSON.stringify(inp)!==JSON.stringify(lastInput)){socket.emit('input',inp);lastInput={...inp};}
+}
+
+// ─── Socket ───────────────────────────────────────────────────────────────────
+function connect(name,roomId){
+  socket=io(window.location.origin,{transports:['websocket','polling']});
+  document.getElementById('connStatus').textContent='Connecting…';
+
+  socket.on('connect',()=>{
+    document.getElementById('connStatus').textContent='Connected ✓';
+    socket.emit('joinRoom',{roomId,name});
+  });
+
+  socket.on('init',data=>{
+    myId=data.playerId;tiles=data.tiles;
+    lootRooms=data.lootRooms||[];
+    localPickups=[...data.pickups];
+    localBarricades=[...data.barricades];
+    localGroundWeapons=[...data.groundWeapons];
+    mapInfo={CX:data.CX,CY:data.CY,bx1:data.bx1,bx2:data.bx2,by1:data.by1,by2:data.by2};
+    document.getElementById('lobby').style.display='none';
+    document.getElementById('gameCanvas').classList.remove('lobby-active');
+    requestAnimationFrame(loop);
+  });
+
+  socket.on('state',s=>{
+    gameState=s;
+    localBarricades=s.barricades||[];
+    localGroundWeapons=s.groundWeapons||[];
+    localPickups=s.pickups||[];
+    myPlayer=s.players.find(p=>p.id===myId)||null;
+    updateHUD();
+    updateLighting();
+    if(menuOpen)updateMenuScoreboard();
+  });
+
+  socket.on('phaseChange',data=>{
+    if(data.phase==='night'){
+      const al=document.getElementById('hordeAlert');
+      al.innerHTML='⚠ HORDE NIGHT ⚠<br><span style="font-size:13px;font-weight:normal">DEFEND THE BASE!</span>';
+      al.className='';al.style.display='block';
+      setTimeout(()=>{al.className='shrunk';al.innerHTML='🌙 HORDE';},3000);
+      hordeAlertActive=true;
+    }else if(data.phase==='score'){
+      document.getElementById('deathScreen').style.display='none';
+      showScoreScreen(data.scores);
+    }else if(data.phase==='day'){
+      document.getElementById('scoreScreen').style.display='none';
+      const al=document.getElementById('hordeAlert');
+      al.style.display='none';al.className='';
+      hordeAlertActive=false;
+    }
+  });
+
+  socket.on('pickupSpawned',pk=>{localPickups.push(pk);});
+  socket.on('pickupTaken',d=>{localPickups=localPickups.filter(p=>p.id!==d.id);});
+  socket.on('groundWeaponAdded',gw=>{localGroundWeapons.push(gw);});
+  socket.on('groundWeaponRemoved',d=>{localGroundWeapons=localGroundWeapons.filter(g=>g.id!==d.id);});
+  socket.on('barricadeAdded',b=>{if(!localBarricades.find(x=>x.tx===b.tx&&x.ty===b.ty))localBarricades.push(b);});
+  socket.on('barricadeDestroyed',d=>{localBarricades=localBarricades.filter(b=>b.tx!==d.tx||b.ty!==d.ty);});
+  socket.on('zombieKilled',d=>{spawnFX(d.x,d.y,'#933',10);});
+  socket.on('screamerPulse',d=>{screamerPulses.push({x:d.x,y:d.y,r:0,maxR:240,life:45});});
+  socket.on('ping',d=>{pings.push({...d,life:120});addPingDOM(d);});
+  socket.on('chat',d=>{addChatMsg(d);});
+  socket.on('playerDied',d=>{
+    if(d.id===myId){
+      document.getElementById('deathScreen').style.display='flex';
+      document.getElementById('deathInfo').textContent=`Day ${d.day} · ${d.kills} total kills`;
+      document.getElementById('respawnLabel').textContent=`Respawning in ${d.respawnIn}s`;
+      startRespawnBar(d.respawnIn);
+    }
+  });
+  socket.on('playerRespawned',d=>{
+    if(d.id===myId){
+      document.getElementById('deathScreen').style.display='none';
+      mouse.left=false;lastInput={};
+    }
+  });
+  socket.on('connect_error',()=>{document.getElementById('connStatus').textContent='Connection failed — is the server running?';});
+}
+
+document.getElementById('joinBtn').onclick=()=>{
+  const name=document.getElementById('nameInput').value.trim()||'Survivor';
+  const room=document.getElementById('roomInput').value.trim()||'main';
+  connect(name,room);
+};
+
+// ─── Score / respawn ──────────────────────────────────────────────────────────
+function showScoreScreen(scores){
+  document.getElementById('scoreScreen').style.display='flex';
+  const tb=document.getElementById('scoreTbody');tb.innerHTML='';
+  (scores||[]).forEach((s,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td style="color:#444">${i+1}</td><td>${s.name}</td><td style="text-align:center;color:#fa0">${s.kills}</td><td style="text-align:center;color:#444">${s.total}</td>`;
+    tb.appendChild(tr);
+  });
+  const fill=document.getElementById('scoreFill');
+  fill.style.transition='none';fill.style.width='100%';
+  setTimeout(()=>{fill.style.transition='width 12s linear';fill.style.width='0%';},50);
+}
+function startRespawnBar(secs){
+  const fill=document.getElementById('respawnFill');
+  fill.style.transition='none';fill.style.width='100%';
+  setTimeout(()=>{fill.style.transition=`width ${secs}s linear`;fill.style.width='0%';},50);
+  let t=secs;
+  const iv=setInterval(()=>{
+    t--;document.getElementById('respawnLabel').textContent=t>0?`Respawning in ${t}s`:'Respawning…';
+    if(t<=0)clearInterval(iv);
+  },1000);
+}
+
+// ─── Chat / ping ──────────────────────────────────────────────────────────────
+function addChatMsg({name,text}){
+  const el=document.getElementById('chatMessages');
+  const d=document.createElement('div');d.className='chatMsg';
+  d.innerHTML=`<span class="cn">${name}</span>: ${text}`;
+  el.appendChild(d);
+  if(el.children.length>5)el.removeChild(el.children[0]);
+  setTimeout(()=>{if(d.parentNode)d.parentNode.removeChild(d);},8000);
+}
+function addPingDOM({x,y,name}){
+  const pl=document.createElement('div');
+  pl.style.cssText='position:absolute;color:#fa0;font-size:10px;font-family:monospace;pointer-events:none;z-index:10;';
+  pl.textContent=`📍${name}`;
+  document.body.appendChild(pl);
+  const upd=()=>{pl.style.left=(x-camera.x-16)+'px';pl.style.top=(y-camera.y-28)+'px';};
+  upd();
+  const iv=setInterval(upd,16);
+  setTimeout(()=>{clearInterval(iv);if(pl.parentNode)pl.parentNode.removeChild(pl);},5000);
+}
+
+// ─── Particles ────────────────────────────────────────────────────────────────
+function spawnFX(x,y,color,n){
+  for(let i=0;i<(n||5);i++)
+    particles.push({x,y,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5,
+      life:18+Math.random()*10,color,r:2+Math.random()*2});
+}
+
+// ─── Lighting ─────────────────────────────────────────────────────────────────
+function updateLighting(){
+  const {phase,dayTimer}=gameState;
+  if(phase==='day'){
+    // Dusk: last 30s of day
+    const duskFrac=Math.max(0,1-(dayTimer/(TICK*30)));
+    lightLevel=duskFrac*0.35; // 0 → 0.35 during dusk
+  }else if(phase==='night'){
+    // Fade to full night in first 10s
+    const nightFrac=Math.min(1,1-(dayTimer/(NIGHT_TICKS-TICK*10)));
+    lightLevel=0.35+nightFrac*0.65; // 0.35 → 1.0
+  }else if(phase==='score'){
+    lightLevel=0;
+  }
+}
+const NIGHT_TICKS=TICK*135;
+
+// ─── HUD ──────────────────────────────────────────────────────────────────────
+function updateHUD(){
+  if(!myPlayer)return;
+  const p=myPlayer;
+
+  // Health
+  document.getElementById('hpFill').style.width=(p.hp/p.maxHp*100)+'%';
+  document.getElementById('hpFill').style.background=p.hp>50?'#4e4':p.hp>25?'#ea4':'#e44';
+  document.getElementById('hpNum').textContent=Math.ceil(p.hp);
+
+  // Stamina
+  document.getElementById('staminaFill').style.width=(p.stamina/p.maxStamina*100)+'%';
+  document.getElementById('staminaFill').style.background=p.stamina>30?'#48f':'#555';
+
+  // Kills / wood
+  document.getElementById('killVal').textContent=p.kills;
+  document.getElementById('woodVal').textContent=p.wood;
+
+  // Weapon slots
+  for(let i=0;i<2;i++){
+    const w=p.slots?.[i];
+    const ws=document.getElementById('ws'+i);
+    const isActive=p.activeSlot===i;
+    ws.className='wslot'+(isActive?' active':'')+(w?'':' empty');
+    if(w){
+      document.getElementById('wn'+i).textContent=w.name;
+      document.getElementById('wa'+i).textContent=w.mag;
+      document.getElementById('wa'+i).style.fontSize='20px';
+      document.getElementById('wa'+i).style.color='#eee';
+      document.getElementById('wr'+i).textContent='/ '+w.reserve+' reserve';
+      // Reload bar
+      const rt=document.getElementById('rt'+i);
+      const rf=document.getElementById('rf'+i);
+      if(p.reloading&&isActive&&p.reloadMax>0){
+        rt.style.display='block';
+        rf.style.width=((1-p.reloadTimer/p.reloadMax)*100)+'%';
+      }else{rt.style.display='none';}
+    }else{
+      document.getElementById('wn'+i).textContent='— EMPTY —';
+      document.getElementById('wa'+i).textContent='F to pick up';
+      document.getElementById('wa'+i).style.fontSize='11px';
+      document.getElementById('wa'+i).style.color='#444';
+      document.getElementById('wr'+i).textContent='';
+      document.getElementById('rt'+i).style.display='none';
+    }
+  }
+
+  // Phase / timer
+  const tl=Math.ceil(gameState.dayTimer/TICK);
+  const phase=gameState.phase;
+  const pl=document.getElementById('phaseLabel');
+  if(phase==='night'){pl.textContent='🌙 NIGHT — Day '+gameState.day;pl.style.color='#88f';}
+  else if(phase==='score'){pl.textContent='☀ DAY '+(gameState.day)+' STARTING';pl.style.color='#fa0';}
+  else{
+    const isDusk=gameState.dayTimer<TICK*30;
+    pl.textContent=(isDusk?'🌅':'☀')+' DAY '+gameState.day;
+    pl.style.color=isDusk?'#f84':'#fa0';
+  }
+  document.getElementById('timerLabel').textContent=
+    phase==='score'?'Score screen…':
+    phase==='night'?`Dawn in: ${tl}s`:`Horde in: ${tl}s`;
+
+  // Location
+  if(tiles){
+    const tx=Math.floor(p.x/TILE),ty=Math.floor(p.y/TILE);
+    const t=tiles[ty]?.[tx];
+    document.getElementById('lootLabel').style.display=t===T_LOOT?'block':'none';
+    const loc=t===T_BASE?'CENTRAL BASE':t===T_COURT?'COURTYARD':t===T_LOOT?'LOOT ROOM':
+      tx<mapInfo.CX-12?'WEST WING':tx>mapInfo.CX+12?'EAST WING':ty<mapInfo.CY-12?'NORTH WING':'SOUTH WING';
+    document.getElementById('locLabel').textContent=loc;
+  }
+
+  // Pickup prompt
+  const pp=document.getElementById('pickupPrompt');
+  if(p.nearWeaponId!==null&&p.nearWeaponId!==undefined){
+    const gw=localGroundWeapons.find(g=>g.id===p.nearWeaponId);
+    if(gw){
+      pp.style.display='block';
+      const cur=p.slots?.[p.activeSlot];
+      pp.textContent=cur?`F · Swap ${cur.name} → ${gw.name} (${gw.mag}/${gw.reserve}r)`:`F · Pick up ${gw.name} (${gw.mag}/${gw.reserve}r)`;
+    }else pp.style.display='none';
+  }else pp.style.display='none';
+}
+
+// ─── Draw ─────────────────────────────────────────────────────────────────────
+const TCOL={
+  [T_WALL]:  ['#1c1c28','#28283a','#303048'],
+  [T_FLOOR]: ['#161620','#1c1e2e','#222436'],
+  [T_COURT]: ['#121218','#16161c','#1c1c22'],
+  [T_BASE]:  ['#101810','#161e16','#1c261c'],
+  [T_LOOT]:  ['#181400','#201c00','#282200'],
+};
+const PCOL={medkit:'#4f4',wood:'#a84'};
+const PLBL={medkit:'+',wood:'W'};
+
+// Ground weapon colors & shapes per type
+const GWCOL={pistol:'#ff9',shotgun:'#fa4',rifle:'#4ff',smg:'#f4f'};
+
+let pickupBob=0;
+
+function drawGroundWeapon(gw,cx,cy){
+  const sx=gw.x-cx,sy=gw.y-cy+Math.sin(pickupBob+(gw.id||0)*0.4)*3;
+  if(Math.abs(sx)>W+60||Math.abs(sy)>H+60)return;
+  const col=GWCOL[gw.type]||'#fff';
+  ctx.save();
+  ctx.shadowColor=col;ctx.shadowBlur=gw.loot?14:8;
+  ctx.fillStyle=col;ctx.strokeStyle=col;ctx.lineWidth=1.5;
+  ctx.translate(sx,sy);
+
+  // Draw shape per weapon type
+  if(gw.type==='pistol'){
+    ctx.fillRect(-6,-4,12,8);ctx.fillRect(2,-7,4,5);
+  }else if(gw.type==='shotgun'){
+    ctx.fillRect(-11,-4,22,7);ctx.fillRect(-13,-2,5,4);ctx.fillRect(9,-2,6,4);
+  }else if(gw.type==='rifle'){
+    ctx.fillRect(-14,-3,28,6);ctx.fillRect(-14,-6,8,4);ctx.fillRect(8,-5,4,3);
+  }else if(gw.type==='smg'){
+    ctx.fillRect(-8,-4,16,7);ctx.fillRect(-4,-7,5,4);ctx.fillRect(6,-2,4,6);
+  }
+  ctx.restore();
+
+  // Label mag/reserve
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.6)';ctx.font='8px monospace';ctx.textAlign='center';
+  ctx.fillStyle=col;
+  ctx.fillText(gw.name+' '+gw.mag+'|'+gw.reserve,sx,sy+16);
+  ctx.restore();
+}
+
+function drawConeOfVision(p){
+  if(!p||!p.alive)return;
+  const sx=p.x-camera.x,sy=p.y-camera.y;
+
+  // Cone angle based on phase — medium visibility
+  const isNight=gameState.phase==='night';
+  const coneHalf=isNight?(Math.PI*0.5):(Math.PI*0.72); // 90° night / 130° day
+  const coneLen=isNight?280:450;
+
+  // Draw darkness mask over entire canvas, cut out the cone
+  const darkness=lightLevel;
+  if(darkness<0.01)return; // full day, no mask
+
+  ctx.save();
+
+  // Create clipping — fill everything EXCEPT the cone
+  ctx.beginPath();
+  ctx.rect(0,0,W,H);
+  // Subtract cone from fill using even-odd
+  ctx.moveTo(sx,sy);
+  ctx.arc(sx,sy,coneLen,p.angle-coneHalf,p.angle+coneHalf);
+  ctx.closePath();
+  ctx.fillStyle=`rgba(0,0,8,${darkness*0.97})`;
+  ctx.fill('evenodd');
+
+  // Soft edge gradient at cone boundary
+  const edgeWidth=isNight?35:60;
+  const grad=ctx.createRadialGradient(sx,sy,coneLen-edgeWidth,sx,sy,coneLen+20);
+  grad.addColorStop(0,'rgba(0,0,8,0)');
+  grad.addColorStop(1,`rgba(0,0,8,${darkness*0.97})`);
+
+  // Also apply amber tint during dusk
+  if(gameState.phase==='day'&&gameState.dayTimer<TICK*30){
+    const duskAmt=(1-gameState.dayTimer/(TICK*30))*0.18;
+    ctx.fillStyle=`rgba(255,140,0,${duskAmt})`;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  ctx.restore();
+}
+
+function draw(){
+  ctx.fillStyle='#0a0a0f';ctx.fillRect(0,0,W,H);
+  if(!tiles||!myPlayer)return;
+
+  pickupBob+=0.05;
+  const me=myPlayer;
+  camera.x=me.x-W/2;camera.y=me.y-H/2;
+  const cx=camera.x,cy=camera.y;
+
+  const sx0=Math.max(0,Math.floor(cx/TILE)),ex=Math.min(MAP_W,Math.ceil((cx+W)/TILE)+1);
+  const sy0=Math.max(0,Math.floor(cy/TILE)),ey=Math.min(MAP_H,Math.ceil((cy+H)/TILE)+1);
+
+  // ── Tiles ──
+  for(let ty=sy0;ty<ey;ty++){
+    for(let tx=sx0;tx<ex;tx++){
+      const t=tiles[ty][tx];
+      const sx=tx*TILE-cx,sy=ty*TILE-cy;
+      const c=TCOL[t]||TCOL[T_WALL];
+      if(t===T_WALL){
+        ctx.fillStyle=c[0];ctx.fillRect(sx,sy,TILE,TILE);
+        ctx.fillStyle=c[1];ctx.fillRect(sx,sy,TILE,5);
+        ctx.fillStyle=c[2];ctx.fillRect(sx,sy,3,TILE);
+      }else{
+        ctx.fillStyle=c[0];ctx.fillRect(sx,sy,TILE,TILE);
+        ctx.strokeStyle=t===T_BASE?'rgba(60,140,60,0.15)':t===T_LOOT?'rgba(200,160,0,0.12)':'rgba(255,255,255,0.03)';
+        ctx.lineWidth=0.5;ctx.strokeRect(sx,sy,TILE,TILE);
+        if(t===T_LOOT){ctx.fillStyle='rgba(160,120,0,0.06)';ctx.fillRect(sx,sy,TILE,TILE);}
+      }
+    }
+  }
+
+  // ── Base border ──
+  const bsx=mapInfo.bx1*TILE-cx,bsy=mapInfo.by1*TILE-cy;
+  const bsw=(mapInfo.bx2-mapInfo.bx1+1)*TILE,bsh=(mapInfo.by2-mapInfo.by1+1)*TILE;
+  ctx.save();ctx.strokeStyle='rgba(80,220,80,0.35)';ctx.lineWidth=2;
+  ctx.setLineDash([10,8]);ctx.strokeRect(bsx,bsy,bsw,bsh);ctx.setLineDash([]);
+  ctx.fillStyle='rgba(80,220,80,0.45)';ctx.font='bold 10px monospace';ctx.textAlign='center';
+  ctx.fillText('◆ CENTRAL BASE ◆',bsx+bsw/2,bsy-5);ctx.restore();
+
+  // ── Loot room borders ──
+  for(const room of lootRooms){
+    const rx=room.x*TILE-cx,ry=room.y*TILE-cy;
+    if(rx>W+80||rx+room.w*TILE<-80||ry>H+80||ry+room.h*TILE<-80)continue;
+    ctx.save();ctx.strokeStyle='rgba(200,160,0,0.4)';ctx.lineWidth=1.5;
+    ctx.setLineDash([6,6]);ctx.strokeRect(rx,ry,room.w*TILE,room.h*TILE);ctx.setLineDash([]);
+    ctx.fillStyle='rgba(200,160,0,0.45)';ctx.font='9px monospace';ctx.textAlign='center';
+    ctx.fillText('LOOT',rx+room.w*TILE/2,ry-3);ctx.restore();
+  }
+
+  // ── Screamer pulses ──
+  screamerPulses=screamerPulses.filter(sp=>{
+    ctx.save();ctx.globalAlpha=Math.max(0,0.5*(1-sp.r/sp.maxR));
+    ctx.strokeStyle='#f0f';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(sp.x-cx,sp.y-cy,sp.r,0,Math.PI*2);ctx.stroke();
+    ctx.restore();
+    sp.r+=7;sp.life--;return sp.life>0;
+  });
+
+  // ── Barricades ──
+  for(const bar of localBarricades){
+    const sx=bar.wx-cx,sy=bar.wy-cy;
+    if(Math.abs(sx)>W+60||Math.abs(sy)>H+60)continue;
+    const pct=bar.hp/bar.maxHp;
+    ctx.save();ctx.translate(sx,sy);
+    ctx.fillStyle=pct>0.5?'#7a5030':'#5a3020';ctx.fillRect(-18,-18,36,36);
+    ctx.strokeStyle='#5a3818';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(-18,-6);ctx.lineTo(18,-6);ctx.moveTo(-18,6);ctx.lineTo(18,6);ctx.stroke();
+    ctx.fillStyle='#1a0000';ctx.fillRect(-18,-23,36,5);
+    ctx.fillStyle=pct>0.6?'#6b3':'#e84';ctx.fillRect(-18,-23,36*pct,5);
+    ctx.restore();
+  }
+
+  // ── Build preview ──
+  if(buildMode){
+    const btx=Math.floor(mouse.wx/TILE),bty=Math.floor(mouse.wy/TILE);
+    const bsx2=btx*TILE+TILE/2-cx,bsy2=bty*TILE+TILE/2-cy;
+    ctx.save();ctx.globalAlpha=0.5;ctx.fillStyle='#7a5030';ctx.fillRect(bsx2-18,bsy2-18,36,36);
+    ctx.globalAlpha=0.85;
+    ctx.strokeStyle=myPlayer&&myPlayer.wood>=3?'#4f4':'#f44';ctx.lineWidth=2;ctx.strokeRect(bsx2-18,bsy2-18,36,36);
+    ctx.restore();
+  }
+
+  // ── Ground weapons ──
+  for(const gw of localGroundWeapons) drawGroundWeapon(gw,cx,cy);
+
+  // ── Pickups (medkit/wood) ──
+  for(const pk of localPickups){
+    const sx=pk.x-cx,sy=pk.y-cy+Math.sin(pickupBob+(pk.id||0)*0.3)*3;
+    if(Math.abs(sx)>W+40||Math.abs(sy)>H+40)continue;
+    ctx.save();ctx.fillStyle=PCOL[pk.type]||'#fff';ctx.shadowColor=PCOL[pk.type]||'#fff';ctx.shadowBlur=7;
+    ctx.beginPath();ctx.arc(sx,sy,7,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    ctx.fillStyle='#000';ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(PLBL[pk.type]||'?',sx,sy);ctx.restore();
+  }
+
+  // ── Particles ──
+  particles=particles.filter(pt=>{
+    ctx.globalAlpha=Math.min(1,pt.life/15);
+    ctx.fillStyle=pt.color;ctx.beginPath();ctx.arc(pt.x-cx,pt.y-cy,pt.r,0,Math.PI*2);ctx.fill();
+    pt.x+=pt.vx;pt.y+=pt.vy;pt.vx*=0.88;pt.vy*=0.88;pt.life--;return pt.life>0;
+  });
+  ctx.globalAlpha=1;
+
+  // ── Zombies ──
+  const ZCOL={normal:'#384020',big:'#5a3020',runner:'#203840',screamer:'#3a2040'};
+  const ZHCOL={normal:'#566040',big:'#7a5040',runner:'#406070',screamer:'#604060'};
+  for(const z of gameState.zombies){
+    const sx=z.x-cx,sy=z.y-cy;
+    if(Math.abs(sx)>W+70||Math.abs(sy)>H+70)continue;
+    // Hide zombies outside cone if it's dark enough
+    if(lightLevel>0.3){
+      const angle=me.angle;
+      const coneHalf=gameState.phase==='night'?Math.PI*0.5:Math.PI*0.72;
+      const coneLen=gameState.phase==='night'?280:450;
+      const dx=z.x-me.x,dy=z.y-me.y;
+      const dist=Math.hypot(dx,dy);
+      const ang=Math.atan2(dy,dx);
+      let diff=ang-angle;
+      while(diff>Math.PI)diff-=Math.PI*2;
+      while(diff<-Math.PI)diff+=Math.PI*2;
+      if(Math.abs(diff)>coneHalf||dist>coneLen)continue;
+    }
+    const r=z.type==='big'?16:z.type==='runner'?8:11;
+    ctx.save();ctx.translate(sx,sy);ctx.rotate(z.angle+Math.PI/2);
+    if(z.screaming){ctx.shadowColor='#f0f';ctx.shadowBlur=14;}
+    ctx.fillStyle=ZCOL[z.type]||ZCOL.normal;
+    ctx.beginPath();ctx.ellipse(0,2,r,r*1.3,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=ZHCOL[z.type]||ZHCOL.normal;
+    ctx.beginPath();ctx.arc(0,-r*0.75,r*0.6,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle=z.type==='runner'?'#0ff':'#f00';
+    ctx.beginPath();ctx.arc(-r*0.28,-r*0.85,2,0,Math.PI*2);ctx.arc(r*0.28,-r*0.85,2,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+    if(z.hp<z.maxHp){
+      const bw=r*2.8;ctx.fillStyle='#100';ctx.fillRect(sx-bw/2,sy-r*2.2,bw,4);
+      ctx.fillStyle='#e44';ctx.fillRect(sx-bw/2,sy-r*2.2,bw*(z.hp/z.maxHp),4);
+    }
+    if(z.type!=='normal'){
+      ctx.fillStyle=z.type==='runner'?'#4ff':z.type==='big'?'#f84':'#f4f';
+      ctx.font='8px monospace';ctx.textAlign='center';
+      ctx.fillText(z.type.toUpperCase(),sx,sy-r*2.5);
+    }
+  }
+
+  // ── Bullets ──
+  for(const b of gameState.bullets){
+    ctx.fillStyle=b.color||'#ff9';ctx.beginPath();ctx.arc(b.x-cx,b.y-cy,3,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=(b.color||'#ff9')+'44';ctx.beginPath();ctx.arc(b.x-cx-b.vx*0.3,b.y-cy-b.vy*0.3,2,0,Math.PI*2);ctx.fill();
+  }
+
+  // ── Players ──
+  for(const p of gameState.players){
+    if(!p.alive)continue;
+    const sx=p.x-cx,sy=p.y-cy;
+    if(Math.abs(sx)>W+60||Math.abs(sy)>H+60)continue;
+    const isMe=p.id===myId;
+    ctx.save();ctx.translate(sx,sy);ctx.rotate(p.angle+Math.PI/2);
+    ctx.fillStyle=isMe?'#1e55a0':'#5a22aa';
+    ctx.beginPath();ctx.ellipse(0,2,10,13,0,0,Math.PI*2);ctx.fill();
+    if(p.sprinting){ctx.fillStyle='rgba(70,130,255,0.25)';ctx.beginPath();ctx.ellipse(0,8,8,6,0,0,Math.PI*2);ctx.fill();}
+    ctx.fillStyle='#dda877';ctx.beginPath();ctx.arc(0,-8,7,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#555';
+    const w=p.slots?.[p.activeSlot];
+    const wt=w?.type||'pistol';
+    if(wt==='pistol')ctx.fillRect(-2,-19,4,14);
+    else if(wt==='shotgun'){ctx.fillRect(-4,-17,8,11);ctx.fillRect(-6,-19,12,4);}
+    else if(wt==='rifle')ctx.fillRect(-2,-23,3,18);
+    else{ctx.fillRect(-3,-18,5,13);ctx.fillRect(-2,-21,4,5);}
+    ctx.restore();
+    ctx.fillStyle=isMe?'#4af':'#a8f';ctx.font='bold 10px monospace';ctx.textAlign='center';
+    ctx.fillText(p.name,sx,sy-22);
+    if(!isMe&&p.hp<p.maxHp){
+      ctx.fillStyle='#100';ctx.fillRect(sx-20,sy-30,40,4);
+      ctx.fillStyle='#4e4';ctx.fillRect(sx-20,sy-30,40*(p.hp/p.maxHp),4);
+    }
+    if(p.reloading&&p.reloadMax>0){
+      const pct=1-p.reloadTimer/p.reloadMax;
+      ctx.fillStyle='#222';ctx.fillRect(sx-18,sy-36,36,3);
+      ctx.fillStyle='#fa0';ctx.fillRect(sx-18,sy-36,36*pct,3);
+    }
+  }
+
+  // ── CONE OF VISION (drawn after world, before crosshair) ──
+  drawConeOfVision(me);
+
+  // ── Pings ──
+  pings=pings.filter(pg=>{
+    const sx=pg.x-cx,sy=pg.y-cy;
+    const a=Math.min(1,pg.life/60);
+    ctx.save();ctx.globalAlpha=a;
+    ctx.strokeStyle='#fa0';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(sx,sy,12+Math.sin(pg.life*0.2)*4,0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle='#fa0';ctx.font='bold 9px monospace';ctx.textAlign='center';
+    ctx.fillText(pg.name,sx,sy-20);ctx.restore();
+    pg.life--;return pg.life>0;
+  });
+
+  // ── Crosshair ──
+  if(me.alive){
+    const mx=mouse.x,my=mouse.y;
+    ctx.strokeStyle='rgba(255,255,255,0.8)';ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(mx-14,my);ctx.lineTo(mx-4,my);ctx.moveTo(mx+4,my);ctx.lineTo(mx+14,my);
+    ctx.moveTo(mx,my-14);ctx.lineTo(mx,my-4);ctx.moveTo(mx,my+4);ctx.lineTo(mx,my+14);
+    ctx.stroke();ctx.beginPath();ctx.arc(mx,my,3,0,Math.PI*2);ctx.stroke();
+    if(buildMode){ctx.strokeStyle='#4f4';ctx.strokeRect(mouse.x-18,mouse.y-18,36,36);}
+  }
+
+  drawMinimap();
+}
+
+function drawMinimap(){
+  if(!tiles)return;
+  const scale=140/(MAP_W*TILE);
+  mctx.fillStyle='#060608';mctx.fillRect(0,0,140,140);
+  const MC={[T_WALL]:'#0c0c14',[T_FLOOR]:'#202032',[T_COURT]:'#161620',[T_BASE]:'#182018',[T_LOOT]:'#201a00'};
+  for(let ty=0;ty<MAP_H;ty++) for(let tx=0;tx<MAP_W;tx++){
+    mctx.fillStyle=MC[tiles[ty][tx]]||'#0c0c14';
+    mctx.fillRect(tx*TILE*scale,ty*TILE*scale,TILE*scale+0.5,TILE*scale+0.5);
+  }
+  mctx.fillStyle='#a84';
+  for(const b of localBarricades)mctx.fillRect(b.wx*scale-1.5,b.wy*scale-1.5,3,3);
+  // Ground weapons on minimap (small colored dots)
+  for(const gw of localGroundWeapons){
+    mctx.fillStyle=GWCOL[gw.type]||'#fff';
+    mctx.fillRect(gw.x*scale-1,gw.y*scale-1,2,2);
+  }
+  mctx.fillStyle='#4f4';
+  for(const pk of localPickups)mctx.fillRect(pk.x*scale-1,pk.y*scale-1,2,2);
+  mctx.fillStyle='#e44';
+  // Only show zombies in cone on minimap too if night
+  for(const z of gameState.zombies){
+    if(lightLevel>0.3&&myPlayer){
+      const angle=myPlayer.angle;
+      const coneHalf=gameState.phase==='night'?Math.PI*0.5:Math.PI*0.72;
+      const coneLen=gameState.phase==='night'?280:450;
+      const dx=z.x-myPlayer.x,dy=z.y-myPlayer.y;
+      const dist=Math.hypot(dx,dy);
+      const ang=Math.atan2(dy,dx);
+      let diff=ang-angle;
+      while(diff>Math.PI)diff-=Math.PI*2;while(diff<-Math.PI)diff+=Math.PI*2;
+      if(Math.abs(diff)>coneHalf||dist>coneLen)continue;
+    }
+    mctx.fillRect(z.x*scale-1,z.y*scale-1,2,2);
+  }
+  for(const p of gameState.players){
+    mctx.fillStyle=p.id===myId?'#4af':p.alive?'#a8f':'#333';
+    mctx.beginPath();mctx.arc(p.x*scale,p.y*scale,3,0,Math.PI*2);mctx.fill();
+  }
+  for(const pg of pings){mctx.fillStyle='#fa0';mctx.beginPath();mctx.arc(pg.x*scale,pg.y*scale,2,0,Math.PI*2);mctx.fill();}
+}
+
+// ─── Loop ─────────────────────────────────────────────────────────────────────
+function loop(){gatherInput();draw();requestAnimationFrame(loop);}
+
+// Init canvas as lobby-active
+document.getElementById('gameCanvas').classList.add('lobby-active');
+</script>
+</body>
+</html>
