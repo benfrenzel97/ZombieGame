@@ -7,8 +7,8 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:'Courier New',monospace;cursor:default;}
-#gameCanvas{cursor:none;}
-canvas{display:block;position:absolute;top:0;left:0;}
+#gameCanvas{cursor:none;display:block;position:absolute;top:0;left:0;}
+#gameCanvas.lobby-active{pointer-events:none;cursor:default;}
 #ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
 
 /* TOP BAR */
@@ -67,7 +67,7 @@ canvas{display:block;position:absolute;top:0;left:0;}
 #chatHint{font-size:9px;color:#444;margin-top:2px;pointer-events:none;}
 
 /* MINIMAP */
-#minimap{position:absolute;top:52px;right:14px;border:1px solid #333;border-radius:4px;background:rgba(0,0,0,0.7);}
+#minimap{position:absolute;top:52px;right:14px;border:1px solid #333;border-radius:4px;background:rgba(0,0,0,0.7);pointer-events:none;}
 
 /* NIGHT OVERLAY */
 #nightOverlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;transition:background 2s;}
@@ -231,9 +231,13 @@ function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerH
 resize(); window.addEventListener('resize',resize);
 
 const TILE=40,MAP_W=150,MAP_H=150;
+const TICK=20; // must match server tick rate
 const T_WALL=0,T_FLOOR=1,T_COURT=2,T_BASE=3,T_LOOT=4;
 
 // ─── State ────────────────────────────────────────────────────────────────────
+// Mark canvas as lobby-active initially so inputs work
+document.getElementById('gameCanvas').classList.add('lobby-active');
+
 let socket=null,myId=null,tiles=null,lootRooms=[];
 let mapInfo={CX:75,CY:75,bx1:65,bx2:85,by1:65,by2:85};
 let gameState={players:[],zombies:[],bullets:[],barricades:[],day:1,dayTimer:0,phase:'day',scoreTimer:0};
@@ -346,6 +350,8 @@ function connect(name,roomId){
     localBarricades=[...data.barricades];
     mapInfo={CX:data.CX,CY:data.CY,bx1:data.bx1,bx2:data.bx2,by1:data.by1,by2:data.by2};
     document.getElementById('lobby').style.display='none';
+    // Re-enable canvas pointer events now that game is running
+    document.getElementById('gameCanvas').classList.remove('lobby-active');
     requestAnimationFrame(loop);
   });
 
