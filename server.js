@@ -201,7 +201,9 @@ class GameRoom{
     for(let i=0;i<n;i++){
       const t=this._safeTile(pool);
       if(Math.abs(t.x-this.CX)<16&&Math.abs(t.y-this.CY)<16)continue;
-      this.zombies.push(makeZombie(this.nzid++,t.x*TILE+TILE/2,t.y*TILE+TILE/2,types[rng(0,types.length-1)],this.day));
+      // BUG FIX: always spawn at exact center of tile to avoid wall overlap
+      const wx=t.x*TILE+TILE/2, wy=t.y*TILE+TILE/2;
+      this.zombies.push(makeZombie(this.nzid++,wx,wy,types[rng(0,types.length-1)],this.day));
     }
   }
   _spawnPickups(n){
@@ -457,11 +459,33 @@ class GameRoom{
         }else z.screaming=false;
       }
       z.prevX=z.x;z.prevY=z.y;
-      this._move(z,mdx*z.speed,mdy*z.speed,r);
+      // Normalize final movement vector before moving
+      const finalMag=Math.hypot(mdx,mdy)||1;
+      this._move(z,(mdx/finalMag)*z.speed,(mdy/finalMag)*z.speed,r);
       z.angle=Math.atan2(mdy,mdx);
-      if(Math.abs(z.x-z.prevX)<0.1&&Math.abs(z.y-z.prevY)<0.1){
-        z.stuckTimer++;if(z.stuckTimer>35){z.x+=(Math.random()-0.5)*16;z.y+=(Math.random()-0.5)*16;z.stuckTimer=0;}
-      }else z.stuckTimer=0;
+
+      // BUG FIX: stuck detection — find nearest open tile and push toward it
+      if(Math.abs(z.x-z.prevX)<0.05&&Math.abs(z.y-z.prevY)<0.05){
+        z.stuckTimer++;
+        if(z.stuckTimer>20){
+          // Scan 8 directions for nearest open space and move there
+          const escDirs=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
+          let escaped=false;
+          for(const[ex,ey]of escDirs){
+            const ntx=Math.floor((z.x+ex*TILE*0.6)/TILE);
+            const nty=Math.floor((z.y+ey*TILE*0.6)/TILE);
+            if(!this.isSolid(ntx,nty)){
+              z.x+=ex*2.5; z.y+=ey*2.5; escaped=true; break;
+            }
+          }
+          if(!escaped){
+            // Last resort: teleport to center of current tile
+            const ctx2=Math.floor(z.x/TILE),cty2=Math.floor(z.y/TILE);
+            z.x=ctx2*TILE+TILE/2; z.y=cty2*TILE+TILE/2;
+          }
+          z.stuckTimer=0;
+        }
+      }else{ z.stuckTimer=0; }
       let hitBar=false;
       for(const bar of this.barricades){
         if(Math.hypot(z.x-bar.wx,z.y-bar.wy)<r+26){
