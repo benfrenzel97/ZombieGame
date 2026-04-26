@@ -181,11 +181,14 @@ class GameRoom{
     this.players=new Map();
     this.zombies=[];this.bullets=[];this.meleeHits=[];
     this.pickups=[];this.groundWeapons=[];this.groundMelee=[];
-    this.barricades=[];  // {tx,ty,wx,wy,hp,maxHp,isDoor,isOpen}
+    this.barricades=[];  // {tx,ty,wx,wy,hp,maxHp,isDoor,isOpen,isMetal}
+    this.turrets=[];     // {id,x,y,angle,ammo,maxAmmo,cooldown}
+    this.killFeed=[];    // recent kills broadcast to clients
+    this.gunshots=[];    // active gunshot alert sources for AI
     this.pings=[];
     this.day=1;this.dayTimer=DAY_TICKS;this.phase='day';
     this.scoreTimer=0;this.hordeSpawned=0;this.hordeMax=0;this.hordeTimer=0;
-    this.nzid=0;this.npid=0;this.ngwid=0;
+    this.nzid=0;this.npid=0;this.ngwid=0;this._tick=0;
     this.flows=new Map();this.flowTimer=0;
     const map=generateMap();
     Object.assign(this,{tiles:map.tiles,ft:map.ft,lootRooms:map.lootRooms,
@@ -336,12 +339,14 @@ class GameRoom{
       slots:this._freshLoadout(), // [gun1, gun2, melee]
       activeSlot:0,
       reloading:false,reloadTimer:0,reloadMax:1,
-      wood:0,kills:0,sessionKills:0,alive:true,
+      wood:0,scrap:0,kills:0,sessionKills:0,alive:true,
       dx:0,dy:0,shooting:false,sprinting:false,
       shootCooldown:0,meleeCooldown:0,
       stamina:100,maxStamina:100,respawnTimer:0,
-      nearWeaponId:null,nearDoorId:null,
+      nearWeaponId:null,nearDoorId:null,nearTurretId:null,
       meleeSwinging:false,meleeAngle:0,
+      lastVx:0,lastVy:0, // for runner prediction
+      damageFromX:0,damageFromY:0,damageFromTimer:0,
     });
   }
 
@@ -429,16 +434,41 @@ class GameRoom{
     }
   }
 
-  handleBuild(sid,{tx,ty,isDoor}){
+  handleBuild(sid,{tx,ty,buildType}){
     const p=this.players.get(sid);
-    if(!p||p.wood<3)return;
+    if(!p)return;
     if(this.tiles[ty]?.[tx]===T_WALL)return;
     if(this.barricades.find(b=>b.tx===tx&&b.ty===ty))return;
-    p.wood-=3;
-    const bar={tx,ty,wx:tx*TILE+TILE/2,wy:ty*TILE+TILE/2,
-      hp:150,maxHp:150,isDoor:!!isDoor,isOpen:false};
-    this.barricades.push(bar);
-    io.to(this.id).emit('barricadeAdded',bar);
+    // Don't build on top of turrets
+    const wx=tx*TILE+TILE/2,wy=ty*TILE+TILE/2;
+    if(this.turrets.find(t=>Math.hypot(t.x-wx,t.y-wy)<TILE))return;
+
+    if(buildType==='door'){
+      if(p.wood<3)return;
+      p.wood-=3;
+      const bar={tx,ty,wx,wy,hp:150,maxHp:150,isDoor:true,isOpen:false,isMetal:false};
+      this.barricades.push(bar);
+      io.to(this.id).emit('barricadeAdded',bar);
+    }else if(buildType==='metal'){
+      if(p.scrap<5)return;
+      p.scrap-=5;
+      const bar={tx,ty,wx,wy,hp:350,maxHp:350,isDoor:false,isOpen:false,isMetal:true};
+      this.barricades.push(bar);
+      io.to(this.id).emit('barricadeAdded',bar);
+    }else if(buildType==='turret'){
+      if(p.scrap<8)return;
+      p.scrap-=8;
+      const turret={id:this.ngwid++,x:wx,y:wy,angle:0,ammo:60,maxAmmo:60,cooldown:0,hp:80,maxHp:80};
+      this.turrets.push(turret);
+      io.to(this.id).emit('turretAdded',turret);
+    }else{
+      // Default: wood barricade
+      if(p.wood<3)return;
+      p.wood-=3;
+      const bar={tx,ty,wx,wy,hp:150,maxHp:150,isDoor:false,isOpen:false,isMetal:false};
+      this.barricades.push(bar);
+      io.to(this.id).emit('barricadeAdded',bar);
+    }
   }
 
   handlePing(sid,{wx,wy}){
@@ -471,14 +501,16 @@ class GameRoom{
   }
 
   _dropWeaponsAtDeath(p){
+    const EXPIRY_TICKS=TICK*120; // 2 minutes
     for(let i=0;i<3;i++){
       const w=p.slots[i]; if(!w)continue;
-      // Don't drop starting knife
-      if(w.kind==='melee'&&w.type==='knife')continue;
+      if(w.kind==='melee'&&w.type==='knife')continue; // keep starting knife
       const dropped={
         id:this.ngwid++,
         x:p.x+(Math.random()-0.5)*40,y:p.y+(Math.random()-0.5)*40,
         kind:w.kind,type:w.type,name:w.name,
+        deathDrop:true,
+        expiresAt:this._tick+(EXPIRY_TICKS), // absolute tick when it disappears
       };
       if(w.kind==='gun'){
         dropped.mag=w.mag;dropped.maxMag=w.maxMag;
@@ -487,15 +519,22 @@ class GameRoom{
       this.groundWeapons.push(dropped);
       io.to(this.id).emit('groundWeaponAdded',dropped);
     }
-    // Reset to fresh loadout
     p.slots=this._freshLoadout();
     p.activeSlot=0;
   }
 
   tick(){
     if(this.players.size===0)return;
+    this._tick++;
     this.flowTimer--;
     if(this.flowTimer<=0){this._rebuildFlows();this.flowTimer=28;}
+
+    // ── Expire death-dropped weapons after 2 minutes ──
+    const expired=this.groundWeapons.filter(gw=>gw.deathDrop&&gw.expiresAt<=this._tick);
+    for(const gw of expired){
+      io.to(this.id).emit('groundWeaponRemoved',{id:gw.id});
+    }
+    this.groundWeapons=this.groundWeapons.filter(gw=>!gw.deathDrop||gw.expiresAt>this._tick);
 
     // ── Phase ──
     if(this.phase==='score'){
@@ -581,6 +620,7 @@ class GameRoom{
       // Cooldown ticks
       if(p.shootCooldown>0)p.shootCooldown--;
       if(p.meleeCooldown>0){p.meleeCooldown--;if(p.meleeCooldown===0)p.meleeSwinging=false;}
+      if(p.damageFromTimer>0)p.damageFromTimer--;
 
       // Reload
       if(p.reloading){
@@ -609,6 +649,8 @@ class GameRoom{
               this.bullets.push({x:p.x,y:p.y,vx:Math.cos(ang)*wd.bSpeed,vy:Math.sin(ang)*wd.bSpeed,
                 life:wd.bLife,damage:wd.damage,owner:sid,color:wd.color});
             }
+            // Emit gunshot alert for AI reaction (silenced shotgun has wider radius)
+            this.gunshots.push({x:p.x,y:p.y,radius:slot.type==='shotgun'?420:slot.type==='rifle'?500:340,life:3});
             if(slot.mag===0&&slot.reserve>0){p.reloading=true;p.reloadMax=wd.reload;p.reloadTimer=wd.reload;}
           }
         }else if(slot.kind==='melee'){
@@ -630,8 +672,13 @@ class GameRoom{
               z.knockbackVy=(dy/dist)*md.knockback;
               if(z.hp<=0){
                 const kp=this.players.get(sid);if(kp){kp.kills++;kp.sessionKills++;}
-                if(Math.random()<0.05){
+                io.to(this.id).emit('killFeed',{killer:kp?.name||'?',killerId:sid,zombieType:z.type,melee:true});
+                const r=Math.random();
+                if(r<0.05){
                   const pk={id:this.npid++,x:z.x,y:z.y,type:'medkit',amount:rng(5,12)};
+                  this.pickups.push(pk);io.to(this.id).emit('pickupSpawned',pk);
+                }else if(r<0.12){
+                  const pk={id:this.npid++,x:z.x,y:z.y,type:'scrap',amount:rng(1,2)};
                   this.pickups.push(pk);io.to(this.id).emit('pickupSpawned',pk);
                 }
                 io.to(this.id).emit('zombieKilled',{id:z.id,x:z.x,y:z.y});
@@ -643,13 +690,22 @@ class GameRoom{
         }
       }
 
-      // Near weapon / door detection
-      p.nearWeaponId=null;p.nearDoorId=null;
+      // Track player velocity for runner prediction
+      const dxMove=p.x-(p._prevX??p.x), dyMove=p.y-(p._prevY??p.y);
+      p.lastVx=dxMove*0.4+(p.lastVx||0)*0.6;
+      p.lastVy=dyMove*0.4+(p.lastVy||0)*0.6;
+      p._prevX=p.x; p._prevY=p.y;
+
+      // Near weapon / door / turret detection
+      p.nearWeaponId=null;p.nearDoorId=null;p.nearTurretId=null;
       for(const gw of this.groundWeapons){
         if(Math.hypot(gw.x-p.x,gw.y-p.y)<58){p.nearWeaponId=gw.id;break;}
       }
       for(const bar of this.barricades){
         if(bar.isDoor&&Math.hypot(bar.wx-p.x,bar.wy-p.y)<65){p.nearDoorId=`${bar.tx}_${bar.ty}`;break;}
+      }
+      for(const t of this.turrets){
+        if(Math.hypot(t.x-p.x,t.y-p.y)<55){p.nearTurretId=t.id;break;}
       }
 
       // Pickups
@@ -659,8 +715,8 @@ class GameRoom{
         const ammoMap={pistol_ammo:0,shotgun_ammo:1,rifle_ammo:2,smg_ammo:3};
         if(pk.type==='medkit'&&p.hp<p.maxHp){p.hp=Math.min(p.maxHp,p.hp+pk.amount);ok=true;}
         else if(pk.type==='wood'){p.wood+=pk.amount;ok=true;}
+        else if(pk.type==='scrap'){p.scrap+=pk.amount;ok=true;}
         else if(ammoMap[pk.type]!==undefined){
-          // Find matching gun slot
           const wTypes=['pistol','shotgun','rifle','smg'];
           const wType=wTypes[ammoMap[pk.type]];
           for(let si=0;si<2;si++){
@@ -689,15 +745,26 @@ class GameRoom{
         if(Math.hypot(b.x-z.x,b.y-z.y)<r){
           z.hp-=b.damage;
           if(z.hp<=0){
-            const kp=this.players.get(b.owner);if(kp){kp.kills++;kp.sessionKills++;}
+            const isTurret=b.owner==='turret';
+            const kp=isTurret?null:this.players.get(b.owner);
+            if(kp){kp.kills++;kp.sessionKills++;}
+            io.to(this.id).emit('killFeed',{
+              killer:isTurret?'Turret':(kp?.name||'?'),
+              killerId:b.owner,zombieType:z.type
+            });
             // Rare ammo drop — 1 in 20
-            if(Math.random()<0.05){
+            const r=Math.random();
+            if(r<0.05){
               const ammoTypes=['pistol_ammo','shotgun_ammo','rifle_ammo','smg_ammo'];
               const pk={id:this.npid++,x:z.x,y:z.y,
                 type:ammoTypes[rng(0,ammoTypes.length-1)],amount:rng(2,6)};
               this.pickups.push(pk);io.to(this.id).emit('pickupSpawned',pk);
-            }else if(Math.random()<0.12){
+            }else if(r<0.12){
               const pk={id:this.npid++,x:z.x,y:z.y,type:'medkit',amount:rng(8,18)};
+              this.pickups.push(pk);io.to(this.id).emit('pickupSpawned',pk);
+            }else if(r<0.22){
+              // Scrap drop — about 10% chance
+              const pk={id:this.npid++,x:z.x,y:z.y,type:'scrap',amount:rng(1,3)};
               this.pickups.push(pk);io.to(this.id).emit('pickupSpawned',pk);
             }
             io.to(this.id).emit('zombieKilled',{id:z.id,x:z.x,y:z.y});
@@ -709,7 +776,14 @@ class GameRoom{
       return b.life>0;
     });
 
-    // ── Zombies ──
+    // ── Zombies — pause during score screen ──
+    if(this.phase==='score'){
+      // Don't move or attack during score screen — just idle in place
+      this.barricades=this.barricades.filter(b=>b.hp>0);
+    }else{
+    // Update gunshot alert lifetimes — they fade after a few ticks
+    this.gunshots=this.gunshots.filter(g=>{g.life--;return g.life>0;});
+
     for(const z of this.zombies){
       // Apply knockback
       if(z.knockbackVx||z.knockbackVy){
@@ -721,8 +795,56 @@ class GameRoom{
 
       const[fdx,fdy,nearP,nearDist]=this._getFlow(z);
       if(!nearP)continue;
+
+      // Damage indicator: track damage source for player (handled at attack time below)
+
+      // ── Runner prediction: zigzag + lead the target ──
       let mdx=fdx,mdy=fdy;
-      if(nearDist<80){mdx=(nearP.x-z.x)/nearDist;mdy=(nearP.y-z.y)/nearDist;}
+      if(nearDist<80){
+        let targetX=nearP.x, targetY=nearP.y;
+        // Runners predict and zigzag
+        if(z.type==='runner'){
+          // Lead by ~0.5 sec of player movement
+          const leadDist=Math.min(80,nearDist*0.5);
+          targetX=nearP.x+(nearP.lastVx||0)*leadDist*0.3;
+          targetY=nearP.y+(nearP.lastVy||0)*leadDist*0.3;
+          // Zigzag side-step
+          z.zigzagPhase=(z.zigzagPhase||0)+0.18;
+          const perp=Math.sin(z.zigzagPhase)*15;
+          const dxToT=targetX-z.x,dyToT=targetY-z.y;
+          const dToT=Math.hypot(dxToT,dyToT)||1;
+          const px=-dyToT/dToT,py=dxToT/dToT;
+          targetX+=px*perp; targetY+=py*perp;
+        }
+        const dxFinal=targetX-z.x,dyFinal=targetY-z.y;
+        const dFinal=Math.hypot(dxFinal,dyFinal)||1;
+        mdx=dxFinal/dFinal; mdy=dyFinal/dFinal;
+      }
+
+      // ── Gunshot reaction: zombies not currently chasing react with 60-70% chance ──
+      if(this.gunshots.length>0&&nearDist>240){
+        // Find loudest nearby gunshot
+        for(const gs of this.gunshots){
+          if(z._lastReactedShot===gs)continue;
+          const gd=Math.hypot(gs.x-z.x,gs.y-z.y);
+          if(gd<gs.radius){
+            // Probabilistic reaction
+            if(Math.random()<0.65){
+              // Override target: head toward the shot
+              const ndx=gs.x-z.x,ndy=gs.y-z.y;
+              const nd=Math.hypot(ndx,ndy)||1;
+              mdx=ndx/nd; mdy=ndy/nd;
+              z._lastReactedShot=gs;
+              z._alertTimer=TICK*5; // alerted state for 5 sec
+              break;
+            }else{
+              z._lastReactedShot=gs; // mark as "heard but ignored"
+            }
+          }
+        }
+      }
+      if(z._alertTimer>0)z._alertTimer--;
+
       const mag=Math.hypot(mdx,mdy)||1;mdx/=mag;mdy/=mag;
 
       // Wall avoidance
@@ -746,13 +868,15 @@ class GameRoom{
         if(dd<minSep){sepX+=dx/dd*(minSep-dd)*0.08;sepY+=dy/dd*(minSep-dd)*0.08;}
       }
 
-      // FIX: separation from players — zombies must not overlap player hitbox
+      // FIX: separation from players — only push away when NOT in attack range
+      // If zombie is close enough to attack, let it stay there and deal damage
       for(const p of this.players.values()){
         if(!p.alive)continue;
         const dx=z.x-p.x,dy=z.y-p.y,dd=Math.hypot(dx,dy)||1;
-        const minSep=r+14; // zombie radius + player radius + buffer
-        if(dd<minSep){
-          const push=(minSep-dd)*0.35;
+        const attackRange=r+14;
+        const sepRange=r+22; // only push when outside attack range
+        if(dd>attackRange&&dd<sepRange){
+          const push=(sepRange-dd)*0.25;
           sepX+=dx/dd*push;sepY+=dy/dd*push;
         }
       }
@@ -764,11 +888,12 @@ class GameRoom{
         z.screamTimer--;
         if(z.screamTimer<=0){
           z.screamTimer=TICK*rng(6,12);z.screaming=true;
+          z.screamRadius=240; // visible scream radius for clients
           for(const z2 of this.zombies)
             if(z2.id!==z.id&&Math.hypot(z2.x-z.x,z2.y-z.y)<240)
               z2.speed=Math.min(z2.speed*1.5+0.5,4.5);
           io.to(this.id).emit('screamerPulse',{x:z.x,y:z.y});
-        }else z.screaming=false;
+        }else{ z.screaming=false; z.screamRadius=0; }
       }
 
       z.prevX=z.x;z.prevY=z.y;
@@ -792,14 +917,16 @@ class GameRoom{
         }
       }else z.stuckTimer=0;
 
-      // Attack barricades/doors in path
+      // Attack barricades/doors/turrets in path
       let hitObstacle=false;
       for(const bar of this.barricades){
         if(bar.isDoor&&bar.isOpen)continue; // open doors = ignore
         if(Math.hypot(z.x-bar.wx,z.y-bar.wy)<r+26){
           z.attackTimer++;
           if(z.attackTimer>=z.attackRate){
-            z.attackTimer=0;bar.hp-=z.type==='big'?22:11;
+            // Metal walls take half damage from zombies
+            const dmg=z.type==='big'?22:11;
+            z.attackTimer=0;bar.hp-=bar.isMetal?dmg*0.5:dmg;
             if(bar.hp<=0){
               io.to(this.id).emit('barricadeDestroyed',{tx:bar.tx,ty:bar.ty});
               this.barricades=this.barricades.filter(b=>b!==bar);
@@ -808,21 +935,63 @@ class GameRoom{
           hitObstacle=true;break;
         }
       }
+      if(!hitObstacle){
+        for(const t of this.turrets){
+          if(Math.hypot(z.x-t.x,z.y-t.y)<r+24){
+            z.attackTimer++;
+            if(z.attackTimer>=z.attackRate){
+              z.attackTimer=0; t.hp-=z.type==='big'?22:11;
+            }
+            hitObstacle=true;break;
+          }
+        }
+      }
 
       if(!hitObstacle&&nearDist<r+14){
         z.attackTimer++;
         if(z.attackTimer>=z.attackRate){
           z.attackTimer=0;nearP.hp-=z.damage;
+          // Track damage source for direction indicator
+          nearP.damageFromX=z.x; nearP.damageFromY=z.y;
+          nearP.damageFromTimer=TICK*1.5; // 1.5 sec arc visible
           if(nearP.hp<=0){
             nearP.hp=0;nearP.alive=false;nearP.respawnTimer=TICK*12;
-            // Drop weapons at death
             this._dropWeaponsAtDeath(nearP);
             io.to(this.id).emit('playerDied',{id:nearP.id,kills:nearP.kills,day:this.day,respawnIn:12});
           }
         }
       }else if(!hitObstacle)z.attackTimer=Math.max(0,z.attackTimer-1);
     }
+    } // end else (not score phase)
     this.barricades=this.barricades.filter(b=>b.hp>0);
+
+    // ── Turrets ── auto-aim and fire at nearest zombie if ammo available
+    if(this.phase!=='score'){
+      for(const t of this.turrets){
+        if(t.cooldown>0)t.cooldown--;
+        if(t.ammo<=0||t.hp<=0)continue;
+        // Find nearest zombie within range
+        let nearest=null,nearestD=300;
+        for(const z of this.zombies){
+          const d=Math.hypot(z.x-t.x,z.y-t.y);
+          if(d<nearestD){nearestD=d;nearest=z;}
+        }
+        if(!nearest)continue;
+        t.angle=Math.atan2(nearest.y-t.y,nearest.x-t.x);
+        if(t.cooldown<=0){
+          t.cooldown=10;t.ammo--;
+          this.bullets.push({
+            x:t.x,y:t.y,
+            vx:Math.cos(t.angle)*16,vy:Math.sin(t.angle)*16,
+            life:50,damage:18,owner:'turret',color:'#fc4',
+          });
+        }
+      }
+      // Cleanup destroyed turrets
+      const destroyed=this.turrets.filter(t=>t.hp<=0);
+      for(const t of destroyed) io.to(this.id).emit('turretRemoved',{id:t.id});
+      this.turrets=this.turrets.filter(t=>t.hp>0);
+    }
 
     // ── Broadcast ──
     const snap={
@@ -830,15 +999,17 @@ class GameRoom{
         id:p.id,name:p.name,x:p.x,y:p.y,angle:p.angle,hp:p.hp,maxHp:p.maxHp,
         alive:p.alive,respawnTimer:p.respawnTimer,activeSlot:p.activeSlot,
         slots:p.slots,reloading:p.reloading,reloadTimer:p.reloadTimer,reloadMax:p.reloadMax,
-        wood:p.wood,kills:p.kills,sessionKills:p.sessionKills,
+        wood:p.wood,scrap:p.scrap,kills:p.kills,sessionKills:p.sessionKills,
         stamina:p.stamina,maxStamina:p.maxStamina,sprinting:p.sprinting,
-        nearWeaponId:p.nearWeaponId,nearDoorId:p.nearDoorId,
+        nearWeaponId:p.nearWeaponId,nearDoorId:p.nearDoorId,nearTurretId:p.nearTurretId,
         meleeSwinging:p.meleeSwinging,meleeAngle:p.meleeAngle,
+        damageFromX:p.damageFromX,damageFromY:p.damageFromY,damageFromTimer:p.damageFromTimer,
       })),
       zombies:this.zombies.map(z=>({id:z.id,x:z.x,y:z.y,hp:z.hp,maxHp:z.maxHp,
-        angle:z.angle,type:z.type,screaming:z.screaming})),
+        angle:z.angle,type:z.type,screaming:z.screaming,screamRadius:z.screamRadius||0})),
       bullets:this.bullets.map(b=>({x:b.x,y:b.y,vx:b.vx,vy:b.vy,color:b.color})),
       barricades:this.barricades,
+      turrets:this.turrets,
       groundWeapons:this.groundWeapons,
       pickups:this.pickups,
       day:this.day,dayTimer:this.dayTimer,phase:this.phase,scoreTimer:this.scoreTimer,
@@ -859,7 +1030,7 @@ io.on('connection',socket=>{
     room=getRoom(roomId);socket.join(roomId);room.addPlayer(socket.id,name);
     socket.emit('init',{
       playerId:socket.id,tiles:room.tiles,
-      pickups:room.pickups,barricades:room.barricades,
+      pickups:room.pickups,barricades:room.barricades,turrets:room.turrets,
       groundWeapons:room.groundWeapons,lootRooms:room.lootRooms,
       CX:room.CX,CY:room.CY,bx1:room.bx1,bx2:room.bx2,by1:room.by1,by2:room.by2,
     });

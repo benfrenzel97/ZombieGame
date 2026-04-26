@@ -108,6 +108,47 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
   top:44px;left:auto;right:20px;transform:none;
   padding:4px 10px;font-size:10px;letter-spacing:1px;border-radius:8px;
 }
+/* ── Kill feed top-right ── */
+#killFeed{
+  position:absolute;top:60px;right:14px;width:240px;
+  display:flex;flex-direction:column;align-items:flex-end;gap:3px;
+  pointer-events:none;z-index:30;
+}
+.kfentry{
+  background:rgba(0,0,0,0.65);padding:3px 8px;border-radius:3px;
+  font-size:10px;font-family:monospace;border-left:2px solid #444;
+  white-space:nowrap;animation:kfFadeIn 0.2s ease;
+}
+.kfentry.mine{color:#4af;border-left-color:#4af;}
+.kfentry.team{color:#eee;border-left-color:#888;}
+.kfentry .kfz{color:#e44;font-weight:bold;}
+@keyframes kfFadeIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
+
+/* ── Build mode corner indicator ── */
+#buildIndicator{
+  position:absolute;top:62px;left:14px;
+  background:rgba(0,0,0,0.75);padding:6px 12px;border-radius:5px;
+  border:1px solid #fa0;color:#fa0;font-size:10px;font-family:monospace;
+  letter-spacing:1px;display:none;pointer-events:none;z-index:30;
+}
+#buildIndicator.metal{border-color:#aac;color:#aac;}
+#buildIndicator.door{border-color:#4af;color:#4af;}
+#buildIndicator.turret{border-color:#f4a;color:#f4a;}
+#buildIndicator .bMode{font-weight:bold;font-size:12px;}
+#buildIndicator .bSub{color:#666;font-size:9px;margin-top:2px;}
+#buildIndicator .bKeys{color:#444;font-size:9px;margin-top:3px;line-height:1.5;}
+
+/* ── Damage indicator overlay ── */
+#dmgOverlay{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  pointer-events:none;z-index:25;
+}
+#turretPrompt{
+  position:absolute;bottom:170px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,0.85);border:1px solid #f4a;border-radius:4px;
+  color:#f4a;font-size:11px;padding:5px 14px;letter-spacing:1px;
+  display:none;pointer-events:none;text-align:center;
+}
 #nightOverlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
 #chatBox{position:absolute;bottom:110px;left:16px;width:270px;pointer-events:none;}
 #chatMessages{display:flex;flex-direction:column;gap:3px;margin-bottom:5px;max-height:90px;overflow:hidden;}
@@ -171,6 +212,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
       <div id="hudLeftStats">
         <div class="hstat">KILLS <span id="killVal">0</span></div>
         <div class="hstat">WOOD <span id="woodVal">0</span></div>
+        <div class="hstat">SCRAP <span id="scrapVal">0</span></div>
       </div>
     </div>
 
@@ -203,22 +245,29 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
     </div>
 
     <div id="hudRight">
-      <div class="hstat" style="margin-top:auto">BUILD<br><span id="woodVal2">0</span> wood</div>
+      <div class="hstat" style="margin-top:auto">BUILD<br><span id="woodVal2">0</span> wood · <span id="scrapVal2">0</span> scrap</div>
     </div>
   </div>
 </div>
 
 <div id="locLabel">CENTRAL BASE</div>
 <div id="lootLabel">⚠ LOOT ROOM</div>
+<div id="killFeed"></div>
+<div id="buildIndicator">
+  <div class="bMode" id="buildModeName">BARRICADE</div>
+  <div class="bSub" id="buildModeCost">3 wood</div>
+  <div class="bKeys">B · barricade<br>G · door<br>M · metal<br>N · turret<br>Click · place</div>
+</div>
 <div id="pickupPrompt"></div>
 <div id="doorPrompt">E · Toggle door</div>
+<div id="turretPrompt"></div>
 <div id="hordeAlert">⚠ HORDE NIGHT ⚠<br><span style="font-size:13px;font-weight:normal">DEFEND THE BASE!</span></div>
 <div id="nightOverlay"></div>
 
 <div id="chatBox">
   <div id="chatMessages"></div>
   <input id="chatInput" placeholder="T to chat…" maxlength="80">
-  <div id="chatHint">T·Chat &nbsp; RMB·Ping &nbsp; F·Pick up &nbsp; E·Door &nbsp; B·Barricade &nbsp; ESC·Menu</div>
+  <div id="chatHint">T·Chat &nbsp; RMB·Ping &nbsp; F·Pick up &nbsp; E·Door &nbsp; B/G/M/N·Build &nbsp; ESC·Menu</div>
 </div>
 
 <!-- LOBBY -->
@@ -263,8 +312,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
       <span>Mouse · Aim</span><span>Click · Attack</span>
       <span>1/2/3 · Select slot</span><span>Q/Scroll · Cycle slot</span>
       <span>F · Pick up weapon</span><span>E · Toggle door</span>
-      <span>R · Reload</span><span>B · Place barricade</span>
-      <span>G · Place door</span><span>RMB · Ping map</span>
+      <span>R · Reload</span><span>B · Build barricade</span>
+      <span>G · Build door</span><span>M · Build metal wall</span>
+      <span>N · Build turret</span><span>RMB · Ping map</span>
       <span>T · Chat</span><span>ESC · This menu</span>
     </div>
   </div>
@@ -272,6 +322,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
     <h2>Drop Legend</h2>
     <div class="lrow"><div class="ldot" style="background:#4f4"></div>Green + · Med Kit</div>
     <div class="lrow"><div class="ldot" style="background:#a84"></div>Brown W · Wood (3 = barricade or door)</div>
+    <div class="lrow"><div class="ldot" style="background:#aac"></div>Gray S · Scrap (5 = metal wall, 8 = turret)</div>
     <div class="lrow"><div class="ldot" style="background:#ff0"></div>Yellow A · Ammo (rare zombie drop)</div>
     <div class="lrow"><div class="ldot" style="background:#ff9;border-radius:2px;height:8px;width:16px"></div>Pistol on ground</div>
     <div class="lrow"><div class="ldot" style="background:#fa4;border-radius:2px;height:8px;width:20px"></div>Shotgun on ground</div>
@@ -311,18 +362,20 @@ let socket=null,myId=null,tiles=null,lootRooms=[];
 let mapInfo={CX:75,CY:75,bx1:65,bx2:85,by1:65,by2:85};
 let gameState={players:[],zombies:[],bullets:[],barricades:[],groundWeapons:[],pickups:[],
   day:1,dayTimer:0,phase:'day',scoreTimer:0};
-let localBarricades=[],localGroundWeapons=[],localPickups=[];
+let localBarricades=[],localGroundWeapons=[],localPickups=[],localTurrets=[];
+let killFeedItems=[]; // {killer, killerId, zombieType, time}
 let camera={x:0,y:0};
 let particles=[],screamerPulses=[],pings=[],meleeEffects=[];
 let myPlayer=null;
-let menuOpen=false,chatOpen=false,buildMode=false,doorMode=false;
+let menuOpen=false,chatOpen=false;
+let buildMode=null; // null, 'barricade', 'door', 'metal', 'turret'
 let lightLevel=0;
 
 // ─── Weapon / Melee colors ────────────────────────────────────────────────────
 const GWCOL={pistol:'#ff9',shotgun:'#fa4',rifle:'#4ff',smg:'#f4f',
              knife:'#aaf',bat:'#fa8',axe:'#f44',machete:'#4fa'};
-const PCOL={medkit:'#4f4',wood:'#a84',pistol_ammo:'#ff0',shotgun_ammo:'#fa6',rifle_ammo:'#4ff',smg_ammo:'#f4f'};
-const PLBL={medkit:'+',wood:'W',pistol_ammo:'A',shotgun_ammo:'A',rifle_ammo:'A',smg_ammo:'A'};
+const PCOL={medkit:'#4f4',wood:'#a84',scrap:'#aac',pistol_ammo:'#ff0',shotgun_ammo:'#fa6',rifle_ammo:'#4ff',smg_ammo:'#f4f'};
+const PLBL={medkit:'+',wood:'W',scrap:'S',pistol_ammo:'A',shotgun_ammo:'A',rifle_ammo:'A',smg_ammo:'A'};
 
 // ─── Input ────────────────────────────────────────────────────────────────────
 const keys={};
@@ -350,8 +403,10 @@ window.addEventListener('keydown',e=>{
   if(e.key==='3')sendSelectSlot(2);
   if(e.key==='f'||e.key==='F'){if(socket)socket.emit('pickup');}
   if(e.key==='e'||e.key==='E'){if(socket)socket.emit('door');}
-  if(e.key==='b'||e.key==='B'){buildMode=!buildMode;doorMode=false;}
-  if(e.key==='g'||e.key==='G'){doorMode=!doorMode;buildMode=false;}
+  if(e.key==='b'||e.key==='B'){buildMode=buildMode==='barricade'?null:'barricade';}
+  if(e.key==='g'||e.key==='G'){buildMode=buildMode==='door'?null:'door';}
+  if(e.key==='m'||e.key==='M'){buildMode=buildMode==='metal'?null:'metal';}
+  if(e.key==='n'||e.key==='N'){buildMode=buildMode==='turret'?null:'turret';}
   if(e.key==='r'||e.key==='R'){if(socket)socket.emit('input',{...lastInput,reloadReq:true});}
   e.preventDefault();
 });
@@ -370,9 +425,9 @@ canvas.addEventListener('mousedown',e=>{
 canvas.addEventListener('mouseup',e=>{if(e.button===0)mouse.left=false;});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('click',e=>{
-  if((buildMode||doorMode)&&myPlayer&&socket){
+  if(buildMode&&myPlayer&&socket){
     const btx=Math.floor(mouse.wx/TILE),bty=Math.floor(mouse.wy/TILE);
-    socket.emit('build',{tx:btx,ty:bty,isDoor:doorMode});
+    socket.emit('build',{tx:btx,ty:bty,buildType:buildMode});
   }
 });
 canvas.addEventListener('wheel',e=>{sendCycleSlot();e.preventDefault();},{passive:false});
@@ -417,7 +472,7 @@ function gatherInput(){
   if(keys['s']||keys['arrowdown'])dy+=1;
   const ang=myPlayer?Math.atan2(mouse.wy-myPlayer.y,mouse.wx-myPlayer.x):0;
   const inp={dx,dy,angle:ang,
-    shooting:mouse.left&&!buildMode&&!doorMode,
+    shooting:mouse.left&&!buildMode,
     sprinting:!!keys['shift'],swapSlot:false,reloadReq:false};
   if(JSON.stringify(inp)!==JSON.stringify(lastInput)){socket.emit('input',inp);lastInput={...inp};}
 }
@@ -433,6 +488,7 @@ function connect(name,roomId){
   socket.on('init',data=>{
     myId=data.playerId;tiles=data.tiles;lootRooms=data.lootRooms||[];
     localPickups=[...data.pickups];localBarricades=[...data.barricades];localGroundWeapons=[...data.groundWeapons];
+    localTurrets=[...(data.turrets||[])];
     mapInfo={CX:data.CX,CY:data.CY,bx1:data.bx1,bx2:data.bx2,by1:data.by1,by2:data.by2};
     document.getElementById('lobby').style.display='none';
     document.getElementById('gameCanvas').classList.remove('lobby-active');
@@ -443,6 +499,7 @@ function connect(name,roomId){
     localBarricades=s.barricades||[];
     localGroundWeapons=s.groundWeapons||[];
     localPickups=s.pickups||[];
+    localTurrets=s.turrets||[];
     myPlayer=s.players.find(p=>p.id===myId)||null;
     updateHUD();updateLighting();
     if(menuOpen)updateMenuScoreboard();
@@ -470,6 +527,13 @@ function connect(name,roomId){
   socket.on('doorToggled',d=>{const b=localBarricades.find(b=>b.tx===d.tx&&b.ty===d.ty);if(b)b.isOpen=d.isOpen;});
   socket.on('zombieKilled',d=>{spawnFX(d.x,d.y,'#933',10);});
   socket.on('screamerPulse',d=>{screamerPulses.push({x:d.x,y:d.y,r:0,maxR:240,life:45});});
+  socket.on('killFeed',d=>{
+    killFeedItems.push({killer:d.killer,killerId:d.killerId,zombieType:d.zombieType,life:240});
+    if(killFeedItems.length>5)killFeedItems.shift();
+    renderKillFeed();
+  });
+  socket.on('turretAdded',t=>{if(!localTurrets.find(x=>x.id===t.id))localTurrets.push(t);});
+  socket.on('turretRemoved',d=>{localTurrets=localTurrets.filter(t=>t.id!==d.id);});
   socket.on('meleeSwing',d=>{meleeEffects.push({pid:d.pid,angle:d.angle,type:d.type,life:10,maxLife:10});});
   socket.on('ping',d=>{pings.push({...d,life:120});addPingDOM(d);});
   socket.on('chat',d=>{addChatMsg(d);});
@@ -529,6 +593,39 @@ function spawnFX(x,y,color,n){
     particles.push({x,y,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5,life:18+Math.random()*10,color,r:2+Math.random()*2});
 }
 
+// ─── Kill feed rendering ──────────────────────────────────────────────────────
+function renderKillFeed(){
+  const el=document.getElementById('killFeed');el.innerHTML='';
+  for(const k of killFeedItems){
+    const div=document.createElement('div');
+    const isMine=k.killerId===myId;
+    const isTurret=k.killerId==='turret';
+    div.className='kfentry '+(isMine?'mine':isTurret?'team':'team');
+    const opacity=Math.min(1,k.life/60);
+    div.style.opacity=opacity;
+    const ztype=k.zombieType||'zombie';
+    div.innerHTML=`<b>${k.killer}</b> killed <span class="kfz">${ztype}</span>`;
+    el.appendChild(div);
+  }
+}
+
+// ─── Build mode indicator ─────────────────────────────────────────────────────
+function updateBuildIndicator(){
+  const el=document.getElementById('buildIndicator');
+  if(!buildMode){el.style.display='none';return;}
+  el.style.display='block';
+  const modes={
+    barricade:{name:'BARRICADE',cost:'3 wood',cls:''},
+    door:{name:'DOOR',cost:'3 wood',cls:'door'},
+    metal:{name:'METAL WALL',cost:'5 scrap',cls:'metal'},
+    turret:{name:'TURRET',cost:'8 scrap',cls:'turret'},
+  };
+  const m=modes[buildMode];
+  el.className='';if(m.cls)el.classList.add(m.cls);
+  document.getElementById('buildModeName').textContent=m.name;
+  document.getElementById('buildModeCost').textContent=m.cost;
+}
+
 // ─── Lighting ─────────────────────────────────────────────────────────────────
 function updateLighting(){
   const{phase,dayTimer}=gameState;
@@ -554,6 +651,8 @@ function updateHUD(){
   document.getElementById('killVal').textContent=p.kills;
   document.getElementById('woodVal').textContent=p.wood;
   document.getElementById('woodVal2').textContent=p.wood;
+  document.getElementById('scrapVal').textContent=p.scrap||0;
+  document.getElementById('scrapVal2').textContent=p.scrap||0;
 
   // Weapon slots
   for(let i=0;i<3;i++){
@@ -625,6 +724,16 @@ function updateHUD(){
   // Door prompt
   const dp=document.getElementById('doorPrompt');
   dp.style.display=p.nearDoorId?'block':'none';
+
+  // Turret prompt
+  const tp=document.getElementById('turretPrompt');
+  if(p.nearTurretId!==null&&p.nearTurretId!==undefined){
+    const t=localTurrets.find(tt=>tt.id===p.nearTurretId);
+    if(t){
+      tp.style.display='block';
+      tp.textContent=`Turret · ${t.ammo}/${t.maxAmmo} ammo · ${Math.ceil(t.hp)}/${t.maxHp} HP`;
+    }else tp.style.display='none';
+  }else tp.style.display='none';
 }
 
 // ─── Tile colors ──────────────────────────────────────────────────────────────
@@ -785,6 +894,19 @@ function draw(){
         ctx.fillStyle='rgba(80,200,80,0.4)';ctx.font='7px monospace';ctx.textAlign='center';
         ctx.fillText('DOOR',0,-25);
       }
+    }else if(bar.isMetal){
+      // Metal wall — gray with rivets
+      ctx.fillStyle=pct>0.5?'#6a6a78':'#4a4a58';ctx.fillRect(-18,-18,36,36);
+      ctx.strokeStyle='#3a3a48';ctx.lineWidth=2;ctx.strokeRect(-18,-18,36,36);
+      ctx.fillStyle='#1a1a22';
+      // Rivets
+      [[-13,-13],[13,-13],[-13,13],[13,13]].forEach(([rx,ry])=>{
+        ctx.beginPath();ctx.arc(rx,ry,2,0,Math.PI*2);ctx.fill();
+      });
+      ctx.fillStyle='#0a0000';ctx.fillRect(-18,-22,36,4);
+      ctx.fillStyle=pct>0.6?'#aac':'#fa8';ctx.fillRect(-18,-22,36*pct,4);
+      ctx.fillStyle='rgba(180,180,210,0.4)';ctx.font='7px monospace';ctx.textAlign='center';
+      ctx.fillText('METAL',0,-25);
     }else{
       ctx.fillStyle=pct>0.5?'#6a4828':'#4a2818';ctx.fillRect(-18,-18,36,36);
       ctx.strokeStyle='#4a3018';ctx.lineWidth=2;
@@ -795,16 +917,63 @@ function draw(){
     ctx.restore();
   }
 
+  // Turrets
+  for(const t of localTurrets){
+    const sx=t.x-cx,sy=t.y-cy;
+    if(Math.abs(sx)>W+60||Math.abs(sy)>H+60)continue;
+    const pct=t.hp/t.maxHp,ammoPct=t.ammo/t.maxAmmo;
+    ctx.save();ctx.translate(sx,sy);
+    // Base
+    ctx.fillStyle='#3a3a44';ctx.beginPath();ctx.arc(0,0,14,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#5a5a64';ctx.lineWidth=1.5;ctx.stroke();
+    // Barrel
+    ctx.rotate(t.angle||0);
+    ctx.fillStyle='#5a5a68';ctx.fillRect(0,-3,22,6);
+    ctx.fillStyle='#888';ctx.fillRect(18,-2,4,4);
+    ctx.restore();
+    // HP bar
+    ctx.fillStyle='#0a0000';ctx.fillRect(sx-16,sy-22,32,3);
+    ctx.fillStyle=pct>0.5?'#aac':'#fa8';ctx.fillRect(sx-16,sy-22,32*pct,3);
+    // Ammo bar
+    ctx.fillStyle='#100';ctx.fillRect(sx-16,sy-18,32,3);
+    ctx.fillStyle=ammoPct>0.3?'#fa0':'#e44';ctx.fillRect(sx-16,sy-18,32*ammoPct,3);
+    // Label
+    ctx.fillStyle='rgba(244,160,80,0.6)';ctx.font='8px monospace';ctx.textAlign='center';
+    ctx.fillText(`TURRET ${t.ammo}`,sx,sy+24);
+  }
+
+  // Screamer constant scream radius (warning circle while scream is active)
+  for(const z of gameState.zombies){
+    if(z.type==='screamer'&&z.screaming&&z.screamRadius>0){
+      const sx=z.x-cx,sy=z.y-cy;
+      if(Math.abs(sx)>W+300||Math.abs(sy)>H+300)continue;
+      ctx.save();ctx.globalAlpha=0.18;
+      ctx.fillStyle='#f0f';
+      ctx.beginPath();ctx.arc(sx,sy,z.screamRadius,0,Math.PI*2);ctx.fill();
+      ctx.globalAlpha=0.4;ctx.strokeStyle='#f4f';ctx.lineWidth=1.5;
+      ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(sx,sy,z.screamRadius,0,Math.PI*2);ctx.stroke();
+      ctx.setLineDash([]);ctx.restore();
+    }
+  }
+
   // Build preview
-  if(buildMode||doorMode){
+  if(buildMode){
     const btx=Math.floor(mouse.wx/TILE),bty=Math.floor(mouse.wy/TILE);
     const bpx=btx*TILE+TILE/2-cx,bpy=bty*TILE+TILE/2-cy;
+    const colors={barricade:{fill:'#6a4828',out:'#fa0',name:'BARRICADE',cost:'wood'},
+                  door:{fill:'#5a4020',out:'#4af',name:'DOOR',cost:'wood'},
+                  metal:{fill:'#5a5a64',out:'#aac',name:'METAL WALL',cost:'scrap'},
+                  turret:{fill:'#3a3a44',out:'#f4a',name:'TURRET',cost:'scrap'}};
+    const m=colors[buildMode]||colors.barricade;
+    const hasResources=m.cost==='wood'?(myPlayer.wood>=3):
+      buildMode==='metal'?(myPlayer.scrap>=5):(myPlayer.scrap>=8);
     ctx.save();ctx.globalAlpha=0.5;
-    ctx.fillStyle=doorMode?'#5a4020':'#6a4828';ctx.fillRect(bpx-18,bpy-18,36,36);
+    ctx.fillStyle=m.fill;ctx.fillRect(bpx-18,bpy-18,36,36);
     ctx.globalAlpha=0.85;
-    ctx.strokeStyle=myPlayer&&myPlayer.wood>=3?'#4f4':'#f44';ctx.lineWidth=2;ctx.strokeRect(bpx-18,bpy-18,36,36);
-    ctx.globalAlpha=1;ctx.fillStyle=doorMode?'#4af':'#fa0';ctx.font='9px monospace';ctx.textAlign='center';
-    ctx.fillText(doorMode?'DOOR':'BARRICADE',bpx,bpy-24);ctx.restore();
+    ctx.strokeStyle=hasResources?'#4f4':'#f44';ctx.lineWidth=2;ctx.strokeRect(bpx-18,bpy-18,36,36);
+    ctx.globalAlpha=1;ctx.fillStyle=m.out;ctx.font='9px monospace';ctx.textAlign='center';
+    ctx.fillText(m.name,bpx,bpy-24);
+    ctx.restore();
   }
 
   // Ground weapons
@@ -897,6 +1066,27 @@ function draw(){
   // Cone of vision
   drawCone(me);
 
+  // Damage direction arc (drawn over cone so visible at night)
+  if(me.alive&&me.damageFromTimer>0&&me.damageFromX!==undefined){
+    const dx=me.damageFromX-me.x, dy=me.damageFromY-me.y;
+    const ang=Math.atan2(dy,dx);
+    const opacity=Math.min(1,me.damageFromTimer/15);
+    // Draw red arc on screen edge pointing toward damage source
+    ctx.save();
+    ctx.translate(W/2,H/2);
+    ctx.rotate(ang);
+    const r=Math.min(W,H)*0.42;
+    const arcWidth=0.5; // ~30 deg arc
+    ctx.strokeStyle=`rgba(255,40,40,${opacity*0.85})`;
+    ctx.lineWidth=8;
+    ctx.shadowColor=`rgba(255,40,40,${opacity})`;
+    ctx.shadowBlur=12;
+    ctx.beginPath();
+    ctx.arc(0,0,r,-arcWidth/2,arcWidth/2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // Pings
   pings=pings.filter(pg=>{
     const sx=pg.x-cx,sy=pg.y-cy,a=Math.min(1,pg.life/60);
@@ -916,12 +1106,32 @@ function draw(){
     ctx.moveTo(mx-14,my2);ctx.lineTo(mx-4,my2);ctx.moveTo(mx+4,my2);ctx.lineTo(mx+14,my2);
     ctx.moveTo(mx,my2-14);ctx.lineTo(mx,my2-4);ctx.moveTo(mx,my2+4);ctx.lineTo(mx,my2+14);
     ctx.stroke();ctx.beginPath();ctx.arc(mx,my2,isMeleeActive?6:3,0,Math.PI*2);ctx.stroke();
-    if(buildMode||doorMode){ctx.strokeStyle=doorMode?'#4af':'#fa0';ctx.strokeRect(mouse.x-18,mouse.y-18,36,36);}
+    if(buildMode){
+      const colors={barricade:'#fa0',door:'#4af',metal:'#aac',turret:'#f4a'};
+      const col=colors[buildMode]||'#fa0';
+      ctx.strokeStyle=col;ctx.strokeRect(mx-18,my2-18,36,36);
+      // Cursor label
+      ctx.fillStyle=col;ctx.font='10px monospace';ctx.textAlign='center';
+      ctx.fillText(buildMode.toUpperCase(),mx,my2-26);
+    }
   }
 }
 
 // ─── Loop ─────────────────────────────────────────────────────────────────────
-function loop(){gatherInput();draw();requestAnimationFrame(loop);}
+function loop(){
+  gatherInput();
+  // Kill feed decay + render
+  if(killFeedItems.length){
+    let needsRender=false;
+    for(const k of killFeedItems){k.life--;if(k.life===60)needsRender=true;}
+    const before=killFeedItems.length;
+    killFeedItems=killFeedItems.filter(k=>k.life>0);
+    if(killFeedItems.length!==before||needsRender)renderKillFeed();
+  }
+  updateBuildIndicator();
+  draw();
+  requestAnimationFrame(loop);
+}
 document.getElementById('gameCanvas').classList.add('lobby-active');
 </script>
 </body>
