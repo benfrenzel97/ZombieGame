@@ -149,6 +149,83 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
   color:#f4a;font-size:11px;padding:5px 14px;letter-spacing:1px;
   display:none;pointer-events:none;text-align:center;
 }
+
+/* ── Scout Report Panel (visible at base) ── */
+#scoutPanel{
+  position:absolute;top:80px;right:20px;width:230px;
+  background:rgba(0,0,0,0.85);border:1px solid #4af;border-radius:6px;
+  padding:12px 14px;display:none;pointer-events:none;z-index:30;
+  font-family:'Courier New',monospace;
+}
+#scoutPanel .spTitle{font-size:9px;color:#4af;letter-spacing:2px;margin-bottom:8px;font-weight:bold;border-bottom:1px solid #224;padding-bottom:5px;}
+#scoutPanel .spRow{display:flex;justify-content:space-between;font-size:10px;margin:4px 0;color:#888;}
+#scoutPanel .spRow .spLabel{color:#555;}
+#scoutPanel .spRow .spVal{color:#aaf;font-weight:bold;}
+#scoutPanel .spVal.size-small{color:#4f4;}
+#scoutPanel .spVal.size-medium{color:#fa0;}
+#scoutPanel .spVal.size-large{color:#f44;}
+#scoutPanel .spHint{font-size:9px;color:#444;margin-top:8px;text-align:center;letter-spacing:1px;}
+
+/* ── Stash UI overlay ── */
+#stashOverlay{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.85);display:none;z-index:150;
+  pointer-events:all;
+  align-items:center;justify-content:center;flex-direction:column;
+}
+#stashPanel{
+  width:90%;max-width:680px;
+  background:#161620;border:1px solid #fa0;border-radius:8px;
+  padding:18px;color:#ccc;font-family:monospace;
+}
+#stashPanel h2{font-size:14px;color:#fa0;letter-spacing:3px;margin-bottom:14px;text-align:center;}
+#stashCols{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+.stashCol h3{font-size:9px;color:#555;letter-spacing:2px;margin-bottom:8px;text-transform:uppercase;}
+.stashGrid{
+  background:#0a0a14;border:1px solid #222;border-radius:4px;
+  padding:8px;min-height:160px;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;
+}
+.stashItem{
+  background:rgba(255,170,30,0.12);border:1px solid #432;border-radius:4px;
+  padding:6px 10px;font-size:10px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+  min-width:100px;transition:border-color 0.1s,background 0.1s;
+}
+.stashItem:hover{border-color:#fa0;background:rgba(255,170,30,0.25);}
+.stashItem .siName{color:#fa0;font-weight:bold;font-size:11px;}
+.stashItem .siInfo{color:#888;font-size:9px;}
+.stashItem.melee{background:rgba(170,170,255,0.1);}
+.stashItem.melee:hover{border-color:#aaf;background:rgba(170,170,255,0.2);}
+.stashItem.melee .siName{color:#aaf;}
+.stashItem.jackpot{border-color:#fa0;box-shadow:0 0 8px rgba(255,170,30,0.4);}
+.resourceRow{display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:#0a0a14;border:1px solid #222;border-radius:3px;margin-bottom:4px;font-size:11px;}
+.resourceRow:hover{border-color:#444;}
+.resourceRow .rName{color:#aaa;}
+.resourceRow .rCount{color:#fa0;font-weight:bold;}
+.resourceRow .rBtn{
+  background:#1a1a2a;border:1px solid #333;color:#888;padding:2px 8px;
+  font-size:9px;border-radius:3px;cursor:pointer;font-family:monospace;letter-spacing:1px;margin-left:6px;
+}
+.resourceRow .rBtn:hover{background:#222;border-color:#555;color:#ccc;}
+#stashFooter{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-top:14px;padding-top:10px;border-top:1px solid #222;
+}
+#stashCloseHint{font-size:10px;color:#444;letter-spacing:1px;}
+#stashSlots{font-size:11px;color:#666;}
+#stashSlots span{color:#fa0;}
+.playerSlot{
+  background:rgba(70,130,255,0.1);border:1px solid #234;border-radius:4px;
+  padding:6px 10px;font-size:10px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+  min-width:100px;transition:border-color 0.1s,background 0.1s;
+}
+.playerSlot:hover{border-color:#4af;background:rgba(70,130,255,0.25);}
+.playerSlot.empty{opacity:0.4;cursor:default;}
+.playerSlot.empty:hover{border-color:#234;background:rgba(70,130,255,0.1);}
+.playerSlot .psName{color:#4af;font-weight:bold;font-size:11px;}
+.playerSlot .psInfo{color:#888;font-size:9px;}
+.playerSlot.melee .psName{color:#aaf;}
 #nightOverlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
 #chatBox{position:absolute;bottom:110px;left:16px;width:270px;pointer-events:none;}
 #chatMessages{display:flex;flex-direction:column;gap:3px;margin-bottom:5px;max-height:90px;overflow:hidden;}
@@ -261,6 +338,40 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
 <div id="pickupPrompt"></div>
 <div id="doorPrompt">E · Toggle door</div>
 <div id="turretPrompt"></div>
+
+<!-- Scout Report Panel (visible at base) -->
+<div id="scoutPanel">
+  <div class="spTitle">⚡ SCOUT REPORT</div>
+  <div class="spRow"><span class="spLabel">THEME</span><span class="spVal" id="spTheme">—</span></div>
+  <div class="spRow"><span class="spLabel">SIZE</span><span class="spVal" id="spSize">—</span></div>
+  <div class="spRow"><span class="spLabel">HORDE</span><span class="spVal" id="spHorde">—</span></div>
+  <div class="spHint" id="spHint">Walk to the terminal · E to deploy</div>
+</div>
+
+<!-- Stash UI overlay -->
+<div id="stashOverlay">
+  <div id="stashPanel">
+    <h2>◆ TEAM STASH ◆</h2>
+    <div id="stashCols">
+      <div class="stashCol">
+        <h3>STASH CONTENTS</h3>
+        <div class="stashGrid" id="stashWeapons"></div>
+        <h3 style="margin-top:14px">RESOURCES</h3>
+        <div id="stashResources"></div>
+      </div>
+      <div class="stashCol">
+        <h3>YOUR LOADOUT — click to deposit</h3>
+        <div class="stashGrid" id="playerSlots"></div>
+        <h3 style="margin-top:14px">CARRIED RESOURCES</h3>
+        <div id="playerCarried"></div>
+      </div>
+    </div>
+    <div id="stashFooter">
+      <span id="stashSlots"><span id="stashUsed">0</span> / <span id="stashMax">6</span> weapon slots</span>
+      <span id="stashCloseHint">ESC or E to close</span>
+    </div>
+  </div>
+</div>
 <div id="hordeAlert">⚠ HORDE NIGHT ⚠<br><span style="font-size:13px;font-weight:normal">DEFEND THE BASE!</span></div>
 <div id="nightOverlay"></div>
 
@@ -295,7 +406,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
 <div class="overlay" id="scoreScreen" style="display:none">
   <h1 style="color:#fa0">NIGHT SURVIVED</h1>
   <table id="scoreTable">
-    <thead><tr><th>#</th><th>PLAYER</th><th>NIGHT KILLS</th><th>TOTAL</th></tr></thead>
+    <thead><tr><th>—</th><th>RESOURCE</th><th colspan="2">DEPOSITED</th></tr></thead>
     <tbody id="scoreTbody"></tbody>
   </table>
   <p style="font-size:9px;color:#333">Next day starting…</p>
@@ -353,13 +464,16 @@ let W,H;
 function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
 resize();window.addEventListener('resize',resize);
 
-const TILE=40,MAP_W=150,MAP_H=150,TICK=20;
-const T_WALL=0,T_FLOOR=1,T_COURT=2,T_BASE=3,T_LOOT=4;
+const TILE=40,TICK=20;
+let worldW=60, worldH=42; // updated when init or worldSwap arrives
+let worldKind='base';     // 'base' | 'zone'
+const T_WALL=0,T_FLOOR=1,T_COURT=2,T_BASE=3,T_LOOT=4,T_BASE_HUB=5,T_CORRIDOR=6;
 const NIGHT_TICKS=TICK*135;
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let socket=null,myId=null,tiles=null,lootRooms=[];
-let mapInfo={CX:75,CY:75,bx1:65,bx2:85,by1:65,by2:85};
+let baseLayout=null; // stashTx/stashTy/terminalTx/terminalTy/spawnTx/spawnTy/exitTx/exitTy/workshopTx/workshopTy
+// (mapInfo removed — base layout comes from server)
 let gameState={players:[],zombies:[],bullets:[],barricades:[],groundWeapons:[],pickups:[],
   day:1,dayTimer:0,phase:'day',scoreTimer:0};
 let localBarricades=[],localGroundWeapons=[],localPickups=[],localTurrets=[];
@@ -369,6 +483,8 @@ let particles=[],screamerPulses=[],pings=[],meleeEffects=[];
 let myPlayer=null;
 let menuOpen=false,chatOpen=false;
 let buildMode=null; // null, 'barricade', 'door', 'metal', 'turret'
+let stashOpen=false;       // is stash UI overlay visible
+let stashData=null;        // last received stash snapshot
 let lightLevel=0;
 
 // ─── Weapon / Melee colors ────────────────────────────────────────────────────
@@ -393,6 +509,17 @@ window.addEventListener('keydown',e=>{
     if(e.key==='Enter'){sendChat();e.preventDefault();}
     return;
   }
+  if(stashOpen){
+    if(e.key==='Escape'||e.key==='e'||e.key==='E'){
+      // Auto-deposit carried resources before closing
+      if(myPlayer&&(myPlayer.wood>0||myPlayer.scrap>0)){
+        socket.emit('stashOp',{action:'deposit_resources'});
+      }
+      closeStashUI();
+      e.preventDefault();
+    }
+    return;
+  }
   if(menuOpen){if(e.key==='Escape'){toggleMenu();e.preventDefault();}return;}
   keys[e.key.toLowerCase()]=true;
   if(e.key==='Escape'){toggleMenu();e.preventDefault();return;}
@@ -402,7 +529,7 @@ window.addEventListener('keydown',e=>{
   if(e.key==='2')sendSelectSlot(1);
   if(e.key==='3')sendSelectSlot(2);
   if(e.key==='f'||e.key==='F'){if(socket)socket.emit('pickup');}
-  if(e.key==='e'||e.key==='E'){if(socket)socket.emit('door');}
+  if(e.key==='e'||e.key==='E'){if(socket)socket.emit('interact');}
   if(e.key==='b'||e.key==='B'){buildMode=buildMode==='barricade'?null:'barricade';}
   if(e.key==='g'||e.key==='G'){buildMode=buildMode==='door'?null:'door';}
   if(e.key==='m'||e.key==='M'){buildMode=buildMode==='metal'?null:'metal';}
@@ -411,7 +538,7 @@ window.addEventListener('keydown',e=>{
   e.preventDefault();
 });
 window.addEventListener('keyup',e=>{
-  if(isLobbyOpen()||menuOpen)return;
+  if(isLobbyOpen()||menuOpen||stashOpen)return;
   keys[e.key.toLowerCase()]=false;
 });
 canvas.addEventListener('mousemove',e=>{
@@ -464,7 +591,7 @@ document.getElementById('menuLeaveBtn').onclick=()=>{if(socket)socket.disconnect
 // ─── Input gathering ──────────────────────────────────────────────────────────
 let lastInput={};
 function gatherInput(){
-  if(!myPlayer||menuOpen||chatOpen||isLobbyOpen())return;
+  if(!myPlayer||menuOpen||chatOpen||stashOpen||isLobbyOpen())return;
   let dx=0,dy=0;
   if(keys['a']||keys['arrowleft'])dx-=1;
   if(keys['d']||keys['arrowright'])dx+=1;
@@ -486,13 +613,32 @@ function connect(name,roomId){
     socket.emit('joinRoom',{roomId,name});
   });
   socket.on('init',data=>{
-    myId=data.playerId;tiles=data.tiles;lootRooms=data.lootRooms||[];
-    localPickups=[...data.pickups];localBarricades=[...data.barricades];localGroundWeapons=[...data.groundWeapons];
+    myId=data.playerId;
+    tiles=data.tiles;
+    lootRooms=data.lootRooms||[];
+    worldW=data.W||60; worldH=data.H||42;
+    worldKind=data.worldKind||'base';
+    baseLayout=data.baseLayout||null;
+    localPickups=[...(data.pickups||[])];
+    localBarricades=[...(data.barricades||[])];
+    localGroundWeapons=[...(data.groundWeapons||[])];
     localTurrets=[...(data.turrets||[])];
-    mapInfo={CX:data.CX,CY:data.CY,bx1:data.bx1,bx2:data.bx2,by1:data.by1,by2:data.by2};
     document.getElementById('lobby').style.display='none';
     document.getElementById('gameCanvas').classList.remove('lobby-active');
     requestAnimationFrame(loop);
+  });
+
+  // World swap — fired when zone loads (start day) or unloads (night/morning)
+  socket.on('worldSwap',data=>{
+    tiles=data.tiles;
+    worldW=data.W; worldH=data.H;
+    worldKind=data.kind||'base';
+    lootRooms=data.lootRooms||[];
+    // Local lists are state-broadcast on next tick anyway, but clear the visible ones for snappy transition
+    if(worldKind==='base'){
+      localGroundWeapons=[];
+      localPickups=[];
+    }
   });
   socket.on('state',s=>{
     gameState=s;
@@ -505,17 +651,34 @@ function connect(name,roomId){
     if(menuOpen)updateMenuScoreboard();
   });
   socket.on('phaseChange',data=>{
-    if(data.phase==='night'){
-      const al=document.getElementById('hordeAlert');
+    const al=document.getElementById('hordeAlert');
+    if(data.phase==='day'){
+      // New zone day starting
+      al.style.display='none';al.className='';
+      document.getElementById('scoreScreen').style.display='none';
+      document.getElementById('deathScreen').style.display='none';
+    }
+    else if(data.phase==='extract'){
+      // Dusk warning — run back!
+      al.innerHTML='⚠ EXTRACT NOW ⚠<br><span style="font-size:13px;font-weight:normal">RUN BACK TO BASE!</span>';
+      al.className='';al.style.display='block';
+      setTimeout(()=>{al.className='shrunk';al.innerHTML='⚠ EXTRACT';},3000);
+    }
+    else if(data.phase==='night'){
       al.innerHTML='⚠ HORDE NIGHT ⚠<br><span style="font-size:13px;font-weight:normal">DEFEND THE BASE!</span>';
       al.className='';al.style.display='block';
       setTimeout(()=>{al.className='shrunk';al.innerHTML='🌙 HORDE';},3000);
-    }else if(data.phase==='score'){
+    }
+    else if(data.phase==='morning'){
+      // Show fight bonus summary briefly
       document.getElementById('deathScreen').style.display='none';
-      showScoreScreen(data.scores);
-    }else if(data.phase==='day'){
+      showMorningSummary(data.fightBonus,data.day);
+    }
+    else if(data.phase==='base'){
+      // New day at base
+      al.style.display='none';al.className='';
       document.getElementById('scoreScreen').style.display='none';
-      const al=document.getElementById('hordeAlert');al.style.display='none';al.className='';
+      document.getElementById('deathScreen').style.display='none';
     }
   });
   socket.on('pickupSpawned',pk=>{localPickups.push(pk);});
@@ -537,6 +700,16 @@ function connect(name,roomId){
   socket.on('meleeSwing',d=>{meleeEffects.push({pid:d.pid,angle:d.angle,type:d.type,life:10,maxLife:10});});
   socket.on('ping',d=>{pings.push({...d,life:120});addPingDOM(d);});
   socket.on('chat',d=>{addChatMsg(d);});
+
+  // Stash UI events
+  socket.on('stashOpen',data=>{
+    stashData=data;
+    openStashUI();
+  });
+  socket.on('stashUpdate',data=>{
+    stashData=data;
+    if(stashOpen) renderStashUI();
+  });
   socket.on('playerDied',d=>{
     if(d.id===myId){
       document.getElementById('deathScreen').style.display='flex';
@@ -557,22 +730,173 @@ document.getElementById('joinBtn').onclick=()=>{
   connect(name,room);
 };
 
-function showScoreScreen(scores){
-  document.getElementById('scoreScreen').style.display='flex';
+function showMorningSummary(fightBonus,day){
+  // Reuse the score screen overlay for the morning summary
+  const screen=document.getElementById('scoreScreen');
+  screen.style.display='flex';
   const tb=document.getElementById('scoreTbody');tb.innerHTML='';
-  (scores||[]).forEach((s,i)=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td style="color:#333">${i+1}</td><td>${s.name}</td><td style="text-align:center;color:#fa0">${s.kills}</td><td style="text-align:center;color:#333">${s.total}</td>`;
-    tb.appendChild(tr);
-  });
+  if(fightBonus){
+    const rows=[
+      ['Wood',(fightBonus.wood||0)+' deposited to stash'],
+      ['Scrap',(fightBonus.scrap||0)+' deposited to stash'],
+      ['Ammo',(fightBonus.ammo||0)+' rounds deposited'],
+    ];
+    if(fightBonus.fullNight){
+      rows.push(['🏆 Full Night Jackpot','Rare weapon added to stash']);
+    }
+    for(const[k,v]of rows){
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td style="color:#888">—</td><td style="color:#ccc">${k}</td><td colspan="2" style="color:#fa0">${v}</td>`;
+      tb.appendChild(tr);
+    }
+  }
+  // Update header to show MORNING
+  const h=screen.querySelector('h1');
+  if(h){h.textContent='NIGHT SURVIVED · DAY '+day;h.style.color=fightBonus?.fullNight?'#fa0':'#fa0';}
   const fill=document.getElementById('scoreFill');fill.style.transition='none';fill.style.width='100%';
-  setTimeout(()=>{fill.style.transition='width 12s linear';fill.style.width='0%';},50);
+  setTimeout(()=>{fill.style.transition='width 10s linear';fill.style.width='0%';},50);
 }
 function startRespawnBar(secs){
   const fill=document.getElementById('respawnFill');fill.style.transition='none';fill.style.width='100%';
   setTimeout(()=>{fill.style.transition=`width ${secs}s linear`;fill.style.width='0%';},50);
   let t=secs;
   const iv=setInterval(()=>{t--;document.getElementById('respawnLabel').textContent=t>0?`Respawning in ${t}s`:'Respawning…';if(t<=0)clearInterval(iv);},1000);
+}
+
+// ─── Scout Report Panel ─────────────────────────────────────────────────────
+function updateScoutPanel(){
+  const panel=document.getElementById('scoutPanel');
+  // Show only when at base, not during night/morning
+  if(gameState.phase==='base'&&gameState.scoutReport){
+    panel.style.display='block';
+    const r=gameState.scoutReport;
+    document.getElementById('spTheme').textContent=(r.theme||'mall').toUpperCase();
+    const sizeEl=document.getElementById('spSize');
+    sizeEl.textContent=(r.size||'medium').toUpperCase();
+    sizeEl.className='spVal size-'+(r.size||'medium');
+    document.getElementById('spHorde').textContent=r.hordeFlavor||'—';
+    // Hint changes if at terminal
+    const hint=document.getElementById('spHint');
+    if(myPlayer&&myPlayer.nearTerminal){
+      hint.textContent='▸ E to deploy ◂';
+      hint.style.color='#4af';
+    } else {
+      hint.textContent='Walk to terminal · E to deploy';
+      hint.style.color='#444';
+    }
+  } else {
+    panel.style.display='none';
+  }
+}
+
+// ─── Stash UI ───────────────────────────────────────────────────────────────
+function openStashUI(){
+  if(!stashData)return;
+  stashOpen=true;
+  document.getElementById('stashOverlay').style.display='flex';
+  // Free the cursor
+  document.getElementById('gameCanvas').style.cursor='default';
+  renderStashUI();
+}
+function closeStashUI(){
+  stashOpen=false;
+  document.getElementById('stashOverlay').style.display='none';
+  document.getElementById('gameCanvas').style.cursor='none';
+}
+
+const RESOURCE_LABELS={
+  wood:'🪵 Wood',
+  scrap:'🔩 Scrap',
+  pistol_ammo:'• Pistol Ammo',
+  shotgun_ammo:'• Shotgun Ammo',
+  rifle_ammo:'• Rifle Ammo',
+  smg_ammo:'• SMG Ammo',
+};
+
+function renderStashUI(){
+  if(!stashData||!myPlayer)return;
+  // Stash weapons
+  const sw=document.getElementById('stashWeapons');
+  sw.innerHTML='';
+  if(stashData.weapons.length===0){
+    sw.innerHTML='<span style="color:#333;font-size:10px">— empty —</span>';
+  } else {
+    stashData.weapons.forEach((w,i)=>{
+      const it=document.createElement('div');
+      it.className='stashItem'+(w.kind==='melee'?' melee':'')+(w.jackpot?' jackpot':'');
+      const ammoStr=w.kind==='gun'?` ${w.mag}/${w.reserve}r`:'';
+      it.innerHTML=`<span class="siName">${w.name}${w.jackpot?' ⭐':''}</span><span class="siInfo">${w.kind.toUpperCase()}${ammoStr}</span>`;
+      it.onclick=()=>{
+        socket.emit('stashOp',{action:'withdraw_weapon',idx:i});
+      };
+      sw.appendChild(it);
+    });
+  }
+  // Stash resources
+  const sr=document.getElementById('stashResources');
+  sr.innerHTML='';
+  let anyRes=false;
+  for(const[k,v]of Object.entries(stashData.resources||{})){
+    if(v<=0)continue;
+    anyRes=true;
+    const row=document.createElement('div');
+    row.className='resourceRow';
+    row.innerHTML=`<span class="rName">${RESOURCE_LABELS[k]||k}</span>
+      <span><span class="rCount">${v}</span>
+      <button class="rBtn" data-t="${k}" data-amt="1">+1</button>
+      <button class="rBtn" data-t="${k}" data-amt="all">ALL</button></span>`;
+    sr.appendChild(row);
+  }
+  if(!anyRes)sr.innerHTML='<span style="color:#333;font-size:10px">— empty —</span>';
+  // Wire resource withdraw buttons
+  for(const btn of sr.querySelectorAll('.rBtn')){
+    btn.onclick=()=>{
+      const t=btn.getAttribute('data-t');
+      const amt=btn.getAttribute('data-amt');
+      if(amt==='all') socket.emit('stashOp',{action:'withdraw_resources_all',type:t});
+      else socket.emit('stashOp',{action:'withdraw_resources',type:t,amt:1});
+    };
+  }
+  // Player slots
+  const ps=document.getElementById('playerSlots');
+  ps.innerHTML='';
+  for(let i=0;i<3;i++){
+    const slot=myPlayer.slots[i];
+    const it=document.createElement('div');
+    it.className='playerSlot'+(slot?(slot.kind==='melee'?' melee':''):' empty');
+    if(!slot){
+      it.innerHTML=`<span class="psName">Slot ${i+1}</span><span class="psInfo">empty</span>`;
+    } else {
+      const ammoStr=slot.kind==='gun'?` ${slot.mag}/${slot.reserve}r`:'';
+      it.innerHTML=`<span class="psName">${slot.name}</span><span class="psInfo">${slot.kind.toUpperCase()}${ammoStr}</span>`;
+      // Don't allow depositing the starting knife
+      if(slot.kind==='melee'&&slot.type==='knife'){
+        it.style.opacity='0.4';it.style.cursor='default';
+        it.title='Cannot deposit starting knife';
+      } else {
+        it.onclick=()=>{
+          socket.emit('stashOp',{action:'deposit_weapon',slot:i});
+        };
+      }
+    }
+    ps.appendChild(it);
+  }
+  // Player carried resources
+  const pc=document.getElementById('playerCarried');
+  pc.innerHTML='';
+  if(myPlayer.wood>0||myPlayer.scrap>0){
+    const row=document.createElement('div');
+    row.className='resourceRow';
+    row.innerHTML=`<span class="rName">Auto-deposit on close</span>
+      <span><span class="rCount">${myPlayer.wood||0} wood · ${myPlayer.scrap||0} scrap</span></span>`;
+    pc.appendChild(row);
+  } else {
+    pc.innerHTML='<span style="color:#333;font-size:10px">— nothing carried —</span>';
+  }
+  // Footer counts
+  const used=stashData.weapons.length+Object.values(stashData.resources||{}).filter(v=>v>0).length;
+  document.getElementById('stashUsed').textContent=used;
+  document.getElementById('stashMax').textContent=stashData.size||0;
 }
 function addChatMsg({name,text}){
   const el=document.getElementById('chatMessages');
@@ -628,12 +952,23 @@ function updateBuildIndicator(){
 
 // ─── Lighting ─────────────────────────────────────────────────────────────────
 function updateLighting(){
-  const{phase,dayTimer}=gameState;
-  if(phase==='day'){
-    lightLevel=Math.max(0,1-(dayTimer/(TICK*30)))*0.35;
-  }else if(phase==='night'){
-    lightLevel=0.35+Math.min(1,1-(dayTimer/(NIGHT_TICKS-TICK*10)))*0.65;
-  }else lightLevel=0;
+  const{phase}=gameState;
+  if(phase==='base'||phase==='morning'){
+    lightLevel=0;
+  }
+  else if(phase==='day'){
+    const zt=gameState.zoneTimer||0;
+    lightLevel=Math.max(0,1-(zt/(TICK*30)))*0.35;
+  }
+  else if(phase==='extract'){
+    // Extract phase = "dusk" — partial darkness
+    lightLevel=0.5;
+  }
+  else if(phase==='night'){
+    const nt=gameState.nightTimer||0;
+    lightLevel=0.35+Math.min(1,1-(nt/(NIGHT_TICKS-TICK*10)))*0.65;
+  }
+  else lightLevel=0;
 }
 
 // ─── HUD ──────────────────────────────────────────────────────────────────────
@@ -686,26 +1021,64 @@ function updateHUD(){
     }
   }
 
-  // Day counter
-  const tl=Math.ceil(gameState.dayTimer/TICK);
+  // Day counter / phase indicator
   const phase=gameState.phase;
   const pl=document.getElementById('dayPhaseLabel');
-  if(phase==='night'){pl.textContent='🌙 NIGHT — Day '+gameState.day;pl.style.color='#88f';}
-  else if(phase==='score'){pl.textContent='☀ DAY '+(gameState.day)+' STARTING';pl.style.color='#fa0';}
-  else{
-    const isDusk=gameState.dayTimer<TICK*30;
-    pl.textContent=(isDusk?'🌅':'☀')+' DAY '+gameState.day;pl.style.color=isDusk?'#f84':'#fa0';
+  const sub=document.getElementById('dayTimerSub');
+  if(phase==='base'){
+    pl.textContent='🏠 BASE — Day '+gameState.day;
+    pl.style.color='#4f4';
+    sub.textContent='Press E at terminal to start day';
   }
-  document.getElementById('dayTimerSub').textContent=
-    phase==='score'?'Score screen…':phase==='night'?`Dawn in: ${tl}s`:`Horde in: ${tl}s`;
+  else if(phase==='day'){
+    const dayTl=Math.ceil((gameState.zoneTimer||0)/TICK);
+    const isDusk=(gameState.zoneTimer||0)<TICK*30;
+    pl.textContent=(isDusk?'🌅':'☀')+' DAY '+gameState.day;
+    pl.style.color=isDusk?'#f84':'#fa0';
+    sub.textContent=isDusk?`Dusk · ${dayTl}s left`:`Day timer · ${dayTl}s`;
+  }
+  else if(phase==='extract'){
+    const exTl=Math.ceil((gameState.phaseTimer||0)/TICK);
+    pl.textContent='⚠ EXTRACT — Day '+gameState.day;
+    pl.style.color='#f44';
+    sub.textContent=`Run back to base · ${exTl}s`;
+  }
+  else if(phase==='night'){
+    const nTl=Math.ceil((gameState.nightTimer||0)/TICK);
+    pl.textContent='🌙 NIGHT — Day '+gameState.day;
+    pl.style.color='#88f';
+    sub.textContent=gameState.sleepAvailable?`Dawn in ${nTl}s · E to sleep`:`Dawn in ${nTl}s`;
+  }
+  else if(phase==='morning'){
+    pl.textContent='☀ MORNING — Day '+gameState.day;
+    pl.style.color='#fa0';
+    sub.textContent='New day starting…';
+  }
 
-  // Location
+  // Location label
   if(tiles){
     const tx=Math.floor(p.x/TILE),ty=Math.floor(p.y/TILE);
     const t=tiles[ty]?.[tx];
     document.getElementById('lootLabel').style.display=t===T_LOOT?'block':'none';
-    const loc=t===T_BASE?'CENTRAL BASE':t===T_COURT?'COURTYARD':t===T_LOOT?'LOOT ROOM':
-      tx<mapInfo.CX-12?'WEST WING':tx>mapInfo.CX+12?'EAST WING':ty<mapInfo.CY-12?'NORTH WING':'SOUTH WING';
+    let loc='ZONE';
+    if(worldKind==='base'){
+      // Base layout — name rooms by position
+      if(baseLayout){
+        if(Math.hypot((tx-baseLayout.stashTx),(ty-baseLayout.stashTy))<6) loc='STASH ROOM';
+        else if(Math.hypot((tx-baseLayout.terminalTx),(ty-baseLayout.terminalTy))<5) loc='COMMAND TERMINAL';
+        else if(Math.hypot((tx-baseLayout.spawnTx),(ty-baseLayout.spawnTy))<6) loc='SLEEPING QUARTERS';
+        else if(Math.hypot((tx-baseLayout.workshopTx),(ty-baseLayout.workshopTy))<8) loc='WORKSHOP';
+        else if(t===T_CORRIDOR) loc='EXIT CORRIDOR';
+        else loc='BASE HUB';
+      } else loc='BASE';
+    } else {
+      // Zone
+      if(t===T_LOOT) loc='LOOT ROOM';
+      else if(t===T_FLOOR) loc='STORE';
+      else if(t===T_COURT) loc='COURTYARD';
+      else if(t===T_CORRIDOR) loc='ZONE ENTRANCE';
+      else loc='MALL';
+    }
     document.getElementById('locLabel').textContent=loc;
   }
 
@@ -721,9 +1094,22 @@ function updateHUD(){
     }else pp.style.display='none';
   }else pp.style.display='none';
 
-  // Door prompt
+  // Interaction prompt (E key — handles terminal, sleep, stash, door)
   const dp=document.getElementById('doorPrompt');
-  dp.style.display=p.nearDoorId?'block':'none';
+  let promptText=null;
+  if(p.nearTerminal&&gameState.phase==='base'){
+    promptText='E · Start day';
+  } else if(p.nearSleep&&gameState.phase==='night'&&gameState.sleepAvailable){
+    promptText='E · Sleep through night';
+  } else if(p.nearStash){
+    promptText='E · Open stash';
+  } else if(p.nearDoorId){
+    promptText='E · Toggle door';
+  }
+  if(promptText){
+    dp.textContent=promptText;
+    dp.style.display='block';
+  } else dp.style.display='none';
 
   // Turret prompt
   const tp=document.getElementById('turretPrompt');
@@ -738,11 +1124,13 @@ function updateHUD(){
 
 // ─── Tile colors ──────────────────────────────────────────────────────────────
 const TCOL={
-  [T_WALL]:  ['#1c1c28','#28283a','#303048'],
-  [T_FLOOR]: ['#161620','#1c1e2e','#222436'],
-  [T_COURT]: ['#121218','#16161c','#1c1c22'],
-  [T_BASE]:  ['#101810','#161e16','#1c261c'],
-  [T_LOOT]:  ['#181400','#201c00','#282200'],
+  [T_WALL]:      ['#1c1c28','#28283a','#303048'],
+  [T_FLOOR]:     ['#161620','#1c1e2e','#222436'],
+  [T_COURT]:     ['#121218','#16161c','#1c1c22'],
+  [T_BASE]:      ['#101810','#161e16','#1c261c'],
+  [T_LOOT]:      ['#181400','#201c00','#282200'],
+  [T_BASE_HUB]:  ['#1a1c20','#222530','#2a2e3a'],
+  [T_CORRIDOR]:  ['#181828','#202036','#282844'],
 };
 
 let pickupBob=0;
@@ -794,9 +1182,13 @@ function drawCone(p){
   ctx.fill('evenodd');
 
   // Dusk amber tint
-  if(gameState.phase==='day'&&gameState.dayTimer<TICK*30){
-    const amt=(1-gameState.dayTimer/(TICK*30))*0.15;
+  if(gameState.phase==='day'&&(gameState.zoneTimer||0)<TICK*30){
+    const amt=(1-(gameState.zoneTimer||0)/(TICK*30))*0.15;
     ctx.fillStyle=`rgba(255,130,0,${amt})`;ctx.fillRect(0,0,W,H);
+  }
+  // Extract phase tint — heavy red
+  if(gameState.phase==='extract'){
+    ctx.fillStyle='rgba(180,20,20,0.18)';ctx.fillRect(0,0,W,H);
   }
   ctx.restore();
 }
@@ -823,8 +1215,8 @@ function draw(){
   camera.x=me.x-W/2;camera.y=me.y-H/2;
   const cx=camera.x,cy=camera.y;
 
-  const sx0=Math.max(0,Math.floor(cx/TILE)),ex=Math.min(MAP_W,Math.ceil((cx+W)/TILE)+1);
-  const sy0=Math.max(0,Math.floor(cy/TILE)),ey=Math.min(MAP_H,Math.ceil((cy+H)/TILE)+1);
+  const sx0=Math.max(0,Math.floor(cx/TILE)),ex=Math.min(worldW,Math.ceil((cx+W)/TILE)+1);
+  const sy0=Math.max(0,Math.floor(cy/TILE)),ey=Math.min(worldH,Math.ceil((cy+H)/TILE)+1);
 
   // Tiles
   for(let ty=sy0;ty<ey;ty++){
@@ -845,13 +1237,60 @@ function draw(){
     }
   }
 
-  // Base border
-  const bsx=mapInfo.bx1*TILE-cx,bsy=mapInfo.by1*TILE-cy;
-  const bsw=(mapInfo.bx2-mapInfo.bx1+1)*TILE,bsh=(mapInfo.by2-mapInfo.by1+1)*TILE;
-  ctx.save();ctx.strokeStyle='rgba(80,220,80,0.3)';ctx.lineWidth=2;
-  ctx.setLineDash([10,8]);ctx.strokeRect(bsx,bsy,bsw,bsh);ctx.setLineDash([]);
-  ctx.fillStyle='rgba(80,220,80,0.4)';ctx.font='bold 9px monospace';ctx.textAlign='center';
-  ctx.fillText('◆ CENTRAL BASE ◆',bsx+bsw/2,bsy-4);ctx.restore();
+  // Base markers (only render when at base)
+  if(worldKind==='base' && baseLayout){
+    // Stash chest marker
+    const stx=baseLayout.stashTx*TILE+TILE/2-cx, sty=baseLayout.stashTy*TILE+TILE/2-cy;
+    ctx.save();
+    ctx.fillStyle='rgba(255,170,30,0.85)';
+    ctx.fillRect(stx-14,sty-10,28,20);
+    ctx.strokeStyle='#fa0';ctx.lineWidth=2;ctx.strokeRect(stx-14,sty-10,28,20);
+    ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(stx-12,sty-3,24,2);
+    ctx.fillStyle='#fa0';ctx.font='bold 9px monospace';ctx.textAlign='center';
+    ctx.fillText('STASH',stx,sty-14);
+    ctx.restore();
+
+    // Day terminal marker
+    const ttx=baseLayout.terminalTx*TILE+TILE/2-cx, tty=baseLayout.terminalTy*TILE+TILE/2-cy;
+    ctx.save();
+    ctx.fillStyle='rgba(70,170,255,0.6)';
+    ctx.fillRect(ttx-12,tty-12,24,24);
+    ctx.strokeStyle='#4af';ctx.lineWidth=2;ctx.strokeRect(ttx-12,tty-12,24,24);
+    // Screen glow
+    ctx.fillStyle='rgba(120,200,255,0.85)';
+    ctx.fillRect(ttx-8,tty-8,16,12);
+    ctx.fillStyle='#4af';ctx.font='bold 9px monospace';ctx.textAlign='center';
+    ctx.fillText(gameState.phase==='night'?'TERMINAL':'TERMINAL',ttx,tty-16);
+    ctx.restore();
+
+    // Spawn marker (sleeping quarters bed)
+    const spx=baseLayout.spawnTx*TILE+TILE/2-cx, spy=baseLayout.spawnTy*TILE+TILE/2-cy;
+    ctx.save();
+    ctx.fillStyle='rgba(120,80,40,0.6)';
+    ctx.fillRect(spx-16,spy-8,32,18);
+    ctx.fillStyle='rgba(180,140,90,0.6)';
+    ctx.fillRect(spx-14,spy-6,28,8);
+    ctx.strokeStyle='rgba(180,140,90,0.5)';ctx.strokeRect(spx-16,spy-8,32,18);
+    ctx.restore();
+
+    // Workshop marker (placeholder)
+    const wpx=baseLayout.workshopTx*TILE+TILE/2-cx, wpy=baseLayout.workshopTy*TILE+TILE/2-cy;
+    ctx.save();
+    ctx.strokeStyle='rgba(180,180,200,0.3)';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+    ctx.strokeRect(wpx-22,wpy-22,44,44);ctx.setLineDash([]);
+    ctx.fillStyle='rgba(180,180,200,0.4)';ctx.font='8px monospace';ctx.textAlign='center';
+    ctx.fillText('WORKSHOP',wpx,wpy);
+    ctx.fillText('(soon)',wpx,wpy+10);
+    ctx.restore();
+  }
+
+  // Zone entry marker (only when in zone)
+  if(worldKind==='zone' && tiles){
+    // Find the corridor entry — server places it at (entryX, entryY)
+    // The corridor is a 5-tile-wide vertical strip on the north side
+    // We don't have server entryX/Y here — but the corridor tiles render with T_CORRIDOR
+    // which makes the entry visible naturally. Add a north arrow if we're near it.
+  }
 
   // Loot room borders
   for(const room of lootRooms){
@@ -1129,6 +1568,9 @@ function loop(){
     if(killFeedItems.length!==before||needsRender)renderKillFeed();
   }
   updateBuildIndicator();
+  updateScoutPanel();
+  // Re-render stash UI when player state changes (slots, carried resources)
+  if(stashOpen) renderStashUI();
   draw();
   requestAnimationFrame(loop);
 }
