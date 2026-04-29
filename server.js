@@ -46,6 +46,75 @@ const ZONE_SIZES={
   large:  {w:160, h:160, loot:10,name:'Large'},
 };
 
+// ─── Upgrade definitions (Stage 3) ───────────────────────────────────────────
+// Each upgrade has 3 tiers, costs scale moderately
+// Cost format: { parts, wood, scrap }
+const UPGRADE_DEFS={
+  // TEAM upgrades
+  stash_capacity:{
+    name:'Stash Capacity', cat:'defensive', scope:'team',
+    desc:'Increases shared stash size',
+    effects:['+2 slots','+4 slots','+6 slots'],
+    costs:[{parts:5,wood:30,scrap:0},{parts:10,wood:60,scrap:0},{parts:20,wood:100,scrap:0}],
+  },
+  reinforced_walls:{
+    name:'Reinforced Walls', cat:'defensive', scope:'team',
+    desc:'Stronger base barricades',
+    effects:['Base barricades +50% HP','+100% HP','+150% HP'],
+    costs:[{parts:5,wood:30,scrap:10},{parts:10,wood:0,scrap:30},{parts:20,wood:0,scrap:60}],
+  },
+  sentry_slot:{
+    name:'Sentry Slot', cat:'defensive', scope:'team',
+    desc:'Auto-turrets at base entrance with passive ammo regen',
+    effects:['1 sentry slot','2 sentry slots','3 sentry slots'],
+    costs:[{parts:5,wood:0,scrap:30},{parts:10,wood:0,scrap:50},{parts:20,wood:0,scrap:80}],
+  },
+  // RESOURCE upgrades (also team)
+  conversion:{
+    name:'Wood Converter', cat:'resource', scope:'team',
+    desc:'Workshop converts wood into scrap',
+    effects:['5 wood → 1 scrap','3 wood → 1 scrap','2 wood → 1 scrap'],
+    costs:[{parts:5,wood:30,scrap:0},{parts:10,wood:60,scrap:0},{parts:20,wood:100,scrap:0}],
+  },
+  refinery:{
+    name:'Ammo Refinery', cat:'resource', scope:'team',
+    desc:'Passive ammo generated per night survived',
+    effects:['+5 ammo/night','+10 ammo/night','+20 ammo/night'],
+    costs:[{parts:5,wood:0,scrap:30},{parts:10,wood:0,scrap:50},{parts:20,wood:0,scrap:100}],
+  },
+  greenhouse:{
+    name:'Medical Greenhouse', cat:'resource', scope:'team',
+    desc:'Passive medkit ammo per night survived',
+    effects:['+1 medkit/night','+2 medkits/night','+3 medkits/night'],
+    costs:[{parts:5,wood:30,scrap:0},{parts:10,wood:50,scrap:0},{parts:20,wood:80,scrap:0}],
+  },
+  // PERSONAL upgrades
+  starting_gun:{
+    name:'Better Starting Gun', cat:'offensive', scope:'personal',
+    desc:'Upgraded starting weapon on respawn',
+    effects:['Spawn with SMG','Spawn with Shotgun','Spawn with Rifle'],
+    costs:[{parts:5,wood:0,scrap:30},{parts:10,wood:0,scrap:50},{parts:20,wood:0,scrap:80}],
+  },
+  faster_respawn:{
+    name:'Faster Respawn', cat:'offensive', scope:'personal',
+    desc:'Reduced respawn timer',
+    effects:['Respawn in 9s','Respawn in 6s','Respawn in 4s'],
+    costs:[{parts:5,wood:30,scrap:0},{parts:10,wood:50,scrap:0},{parts:20,wood:80,scrap:0}],
+  },
+  larger_reserves:{
+    name:'Larger Mag Reserves', cat:'offensive', scope:'personal',
+    desc:'Higher max reserve ammo cap on all guns',
+    effects:['+25% reserve cap','+50% reserve cap','+75% reserve cap'],
+    costs:[{parts:5,wood:0,scrap:30},{parts:10,wood:0,scrap:50},{parts:20,wood:0,scrap:80}],
+  },
+};
+function isPersonalUpgrade(key){ return UPGRADE_DEFS[key]?.scope==='personal'; }
+function upgradeCost(key,nextTier){
+  const d=UPGRADE_DEFS[key];
+  if(!d||nextTier<1||nextTier>3)return null;
+  return d.costs[nextTier-1];
+}
+
 // ─── Base layout (fixed, persistent) ─────────────────────────────────────────
 const BASE_W=60, BASE_H=42;
 function generateBase(){
@@ -101,7 +170,204 @@ function generateMallZone(size){
   const entryX=Math.floor(W/2);
   for(let dy=0;dy<6;dy++) for(let dx=-2;dx<=2;dx++) tiles[BORD+dy][entryX+dx]=T_CORRIDOR;
   for(let dx=-2;dx<=2;dx++) tiles[BORD-1][entryX+dx]=T_CORRIDOR;
+  return finalizeZone(tiles,W,H,lootRooms,entryX,BORD,size);
+}
 
+function carveRoom(tiles,x,y,w,h,ft){
+  for(let ty=y;ty<y+h;ty++) for(let tx=x;tx<x+w;tx++) tiles[ty][tx]=T_WALL;
+  for(let ty=y+1;ty<y+h-1;ty++) for(let tx=x+1;tx<x+w-1;tx++) tiles[ty][tx]=ft;
+}
+
+// ─── Hospital Zone ───────────────────────────────────────────────────────────
+// Narrow corridors, lots of small rooms, claustrophobic
+function generateHospitalZone(size){
+  const cfg=ZONE_SIZES[size]||ZONE_SIZES.medium;
+  const W=cfg.w, H=cfg.h;
+  const tiles=Array.from({length:H},()=>new Array(W).fill(T_WALL));
+  const BORD=4;
+  // Start with everything as walls (T_WALL), then carve narrow hallways and small rooms
+  // Build a grid of small rooms separated by hallways
+  const ROOM_W=6, ROOM_H=5, HALL=3;
+  const cellW=ROOM_W+HALL, cellH=ROOM_H+HALL;
+  const lootRooms=[];
+  // Carve main horizontal hallway
+  const mainHallY=Math.floor(H/2);
+  for(let x=BORD;x<W-BORD;x++) for(let dy=-1;dy<=1;dy++) tiles[mainHallY+dy][x]=T_FLOOR;
+  // Carve vertical hallways at intervals
+  for(let cx=BORD+ROOM_W;cx<W-BORD;cx+=cellW){
+    for(let y=BORD;y<H-BORD;y++) for(let dx=-1;dx<=1;dx++){
+      if(cx+dx>=BORD&&cx+dx<W-BORD)tiles[y][cx+dx]=T_FLOOR;
+    }
+  }
+  // Carve small rooms in the cells
+  for(let gy=BORD;gy<H-BORD-ROOM_H-2;gy+=cellH){
+    for(let gx=BORD;gx<W-BORD-ROOM_W-2;gx+=cellW){
+      // Skip rooms that overlap main hallways
+      if(Math.abs(gy+ROOM_H/2-mainHallY)<3)continue;
+      const isLoot=(lootRooms.length<cfg.loot)&&(Math.random()<0.45);
+      carveRoom(tiles,gx,gy,ROOM_W,ROOM_H,isLoot?T_LOOT:T_FLOOR);
+      if(isLoot)lootRooms.push({x:gx,y:gy,w:ROOM_W,h:ROOM_H});
+      // Doorway facing nearest hallway
+      const doorX=gx+Math.floor(ROOM_W/2), doorY=gy+Math.floor(ROOM_H/2);
+      // Always put a door on the side closest to a hallway
+      if(gy+ROOM_H<mainHallY) tiles[gy+ROOM_H-1][doorX]=T_FLOOR;
+      else if(gy>mainHallY) tiles[gy][doorX]=T_FLOOR;
+      else tiles[doorY][gx+ROOM_W-1]=T_FLOOR;
+    }
+  }
+  // North entry corridor
+  const entryX=Math.floor(W/2);
+  for(let dy=0;dy<6;dy++) for(let dx=-2;dx<=2;dx++) tiles[BORD+dy][entryX+dx]=T_CORRIDOR;
+  for(let dx=-2;dx<=2;dx++) tiles[BORD-1][entryX+dx]=T_CORRIDOR;
+  return finalizeZone(tiles,W,H,lootRooms,entryX,BORD,size);
+}
+
+// ─── Military Outpost Zone ───────────────────────────────────────────────────
+// Gated perimeter with central command building
+function generateMilitaryZone(size){
+  const cfg=ZONE_SIZES[size]||ZONE_SIZES.medium;
+  const W=cfg.w, H=cfg.h;
+  const tiles=Array.from({length:H},()=>new Array(W).fill(T_WALL));
+  const BORD=4;
+  // Open courtyard everywhere
+  for(let y=BORD;y<H-BORD;y++) for(let x=BORD;x<W-BORD;x++) tiles[y][x]=T_COURT;
+  const lootRooms=[];
+
+  // Central command building — large fortified structure
+  const cx=Math.floor(W/2), cy=Math.floor(H/2);
+  const cmdW=Math.floor(W/4), cmdH=Math.floor(H/4);
+  const cmdX=cx-Math.floor(cmdW/2), cmdY=cy-Math.floor(cmdH/2);
+  carveRoom(tiles,cmdX,cmdY,cmdW,cmdH,T_LOOT);
+  lootRooms.push({x:cmdX,y:cmdY,w:cmdW,h:cmdH});
+  // Multiple doorways into command building
+  tiles[cmdY][cx]=T_FLOOR; tiles[cmdY+cmdH-1][cx]=T_FLOOR;
+  tiles[cy][cmdX]=T_FLOOR; tiles[cy][cmdX+cmdW-1]=T_FLOOR;
+
+  // Perimeter wall (one tile inside the border, with 4 gates)
+  const perim=BORD+3;
+  for(let x=perim;x<W-perim;x++){tiles[perim][x]=T_WALL;tiles[H-perim-1][x]=T_WALL;}
+  for(let y=perim;y<H-perim;y++){tiles[y][perim]=T_WALL;tiles[y][W-perim-1]=T_WALL;}
+  // Open 4 gates (cardinal)
+  for(let d=-3;d<=3;d++){
+    tiles[perim][cx+d]=T_COURT;
+    tiles[H-perim-1][cx+d]=T_COURT;
+    tiles[cy+d][perim]=T_COURT;
+    tiles[cy+d][W-perim-1]=T_COURT;
+  }
+
+  // Bunker rooms in 4 corners
+  const bunkerSize=8;
+  const bunkers=[
+    {x:perim+3,y:perim+3},
+    {x:W-perim-bunkerSize-3,y:perim+3},
+    {x:perim+3,y:H-perim-bunkerSize-3},
+    {x:W-perim-bunkerSize-3,y:H-perim-bunkerSize-3},
+  ];
+  for(const b of bunkers){
+    if(b.x<BORD+1||b.y<BORD+1||b.x+bunkerSize>=W-BORD||b.y+bunkerSize>=H-BORD)continue;
+    const isLoot=lootRooms.length<cfg.loot;
+    carveRoom(tiles,b.x,b.y,bunkerSize,bunkerSize,isLoot?T_LOOT:T_FLOOR);
+    if(isLoot)lootRooms.push({x:b.x,y:b.y,w:bunkerSize,h:bunkerSize});
+    // Door on inward side
+    const dx=(b.x<cx)?b.x+bunkerSize-1:b.x;
+    const dy=(b.y<cy)?b.y+bunkerSize-1:b.y;
+    tiles[b.y+Math.floor(bunkerSize/2)][dx]=T_FLOOR;
+    tiles[dy][b.x+Math.floor(bunkerSize/2)]=T_FLOOR;
+  }
+
+  // Watchtower outposts (small loot rooms) scattered
+  for(let i=0;i<Math.min(cfg.loot-lootRooms.length,4);i++){
+    const rx=rng(BORD+2,W-BORD-7),ry=rng(BORD+2,H-BORD-7);
+    if(tiles[ry+1]?.[rx+1]!==T_COURT)continue;
+    if(Math.abs(rx-cx)<cmdW&&Math.abs(ry-cy)<cmdH)continue;
+    carveRoom(tiles,rx,ry,5,5,T_LOOT);
+    lootRooms.push({x:rx,y:ry,w:5,h:5});
+    tiles[ry+2][rx]=T_FLOOR;
+  }
+
+  // North entry corridor (cuts through perimeter)
+  const entryX=cx;
+  for(let dy=0;dy<6;dy++) for(let dx=-2;dx<=2;dx++){
+    if(BORD+dy<H&&entryX+dx>=0&&entryX+dx<W)tiles[BORD+dy][entryX+dx]=T_CORRIDOR;
+  }
+  for(let dx=-2;dx<=2;dx++) tiles[BORD-1][entryX+dx]=T_CORRIDOR;
+  return finalizeZone(tiles,W,H,lootRooms,entryX,BORD,size);
+}
+
+// ─── Suburb Zone ─────────────────────────────────────────────────────────────
+// Grid of houses with streets between them
+function generateSuburbZone(size){
+  const cfg=ZONE_SIZES[size]||ZONE_SIZES.medium;
+  const W=cfg.w, H=cfg.h;
+  const tiles=Array.from({length:H},()=>new Array(W).fill(T_WALL));
+  const BORD=4;
+  // Streets = open courtyard
+  for(let y=BORD;y<H-BORD;y++) for(let x=BORD;x<W-BORD;x++) tiles[y][x]=T_COURT;
+  const lootRooms=[];
+
+  // Generate a grid of houses — each house has 2-4 rooms
+  const HOUSE_W=14, HOUSE_H=11, STREET=6;
+  const cellW=HOUSE_W+STREET, cellH=HOUSE_H+STREET;
+
+  for(let gy=BORD+2;gy<H-BORD-HOUSE_H;gy+=cellH){
+    for(let gx=BORD+2;gx<W-BORD-HOUSE_W;gx+=cellW){
+      // Build a house: outer walls, internal partitions
+      // House outline
+      for(let y=gy;y<gy+HOUSE_H;y++) for(let x=gx;x<gx+HOUSE_W;x++) tiles[y][x]=T_WALL;
+      const isLoot=lootRooms.length<cfg.loot&&Math.random()<0.7;
+      const fillT=isLoot?T_LOOT:T_FLOOR;
+      // Number of internal rooms (2-4)
+      const numRooms=rng(2,4);
+      // Carve interior
+      for(let y=gy+1;y<gy+HOUSE_H-1;y++) for(let x=gx+1;x<gx+HOUSE_W-1;x++) tiles[y][x]=fillT;
+      if(isLoot)lootRooms.push({x:gx,y:gy,w:HOUSE_W,h:HOUSE_H});
+      // Internal partitions for rooms
+      if(numRooms>=2){
+        // Vertical partition
+        const px=gx+Math.floor(HOUSE_W/2);
+        for(let y=gy+1;y<gy+HOUSE_H-1;y++) tiles[y][px]=T_WALL;
+        // Doorway
+        tiles[gy+Math.floor(HOUSE_H/2)][px]=fillT;
+      }
+      if(numRooms>=3){
+        // Horizontal partition (top half)
+        const py=gy+Math.floor(HOUSE_H/3);
+        for(let x=gx+1;x<gx+Math.floor(HOUSE_W/2);x++) tiles[py][x]=T_WALL;
+        tiles[py][gx+Math.floor(HOUSE_W/4)]=fillT;
+      }
+      if(numRooms>=4){
+        // Horizontal partition (bottom half)
+        const py=gy+Math.floor(HOUSE_H*2/3);
+        for(let x=gx+Math.floor(HOUSE_W/2)+1;x<gx+HOUSE_W-1;x++) tiles[py][x]=T_WALL;
+        tiles[py][gx+Math.floor(HOUSE_W*3/4)]=fillT;
+      }
+      // Front door (south side)
+      const doorX=gx+Math.floor(HOUSE_W/2);
+      tiles[gy+HOUSE_H-1][doorX]=T_COURT;
+      tiles[gy+HOUSE_H-1][doorX-1]=T_COURT;
+      // Driveway (small garage entrance)
+      if(Math.random()<0.6){
+        const garageX=gx+rng(1,3);
+        tiles[gy+HOUSE_H-1][garageX]=T_COURT;
+        tiles[gy+HOUSE_H-1][garageX+1]=T_COURT;
+      }
+    }
+  }
+
+  // Make sure streets are clear (roads form a grid pattern)
+  // Already handled by carving courtyard first then placing house walls within
+
+  // North entry corridor
+  const entryX=Math.floor(W/2);
+  for(let dy=0;dy<6;dy++) for(let dx=-2;dx<=2;dx++){
+    if(BORD+dy<H&&entryX+dx>=0&&entryX+dx<W)tiles[BORD+dy][entryX+dx]=T_CORRIDOR;
+  }
+  for(let dx=-2;dx<=2;dx++) tiles[BORD-1][entryX+dx]=T_CORRIDOR;
+  return finalizeZone(tiles,W,H,lootRooms,entryX,BORD,size);
+}
+
+// ─── Helper: finalize a zone (extract floor pools) ──────────────────────────
+function finalizeZone(tiles,W,H,lootRooms,entryX,entryY,size){
   const ft={indoor:[],court:[],loot:[]};
   for(let y=0;y<H;y++) for(let x=0;x<W;x++){
     const t=tiles[y][x];
@@ -109,12 +375,18 @@ function generateMallZone(size){
     if(t===T_COURT)ft.court.push({x,y});
     if(t===T_LOOT) ft.loot.push({x,y});
   }
-  return{tiles,ft,lootRooms,W,H,entryX,entryY:BORD,size};
+  return{tiles,ft,lootRooms,W,H,entryX,entryY,size};
 }
 
-function carveRoom(tiles,x,y,w,h,ft){
-  for(let ty=y;ty<y+h;ty++) for(let tx=x;tx<x+w;tx++) tiles[ty][tx]=T_WALL;
-  for(let ty=y+1;ty<y+h-1;ty++) for(let tx=x+1;tx<x+w-1;tx++) tiles[ty][tx]=ft;
+// ─── Theme dispatcher ────────────────────────────────────────────────────────
+function generateZone(theme,size){
+  switch(theme){
+    case 'hospital': return generateHospitalZone(size);
+    case 'military': return generateMilitaryZone(size);
+    case 'suburb':   return generateSuburbZone(size);
+    case 'mall':
+    default:         return generateMallZone(size);
+  }
 }
 
 // ─── BFS Flow Field ──────────────────────────────────────────────────────────
@@ -174,6 +446,7 @@ class GameRoom{
     this.pickups=[];this.groundWeapons=[];
     this.barricades=[];this.turrets=[];
     this.pings=[];this.gunshots=[];
+    this.grenadesActive=[];
     this._tick=0;
     this.nzid=0;this.npid=0;this.ngwid=0;this.ntid=0;
 
@@ -182,10 +455,21 @@ class GameRoom{
     this.baseBarricades=[];
     this.baseTurrets=[];
 
-    // Stash (Turn 2 will wire UI; now just exists)
+    // Stash — resources include parts now
     this.stash={
-      resources:{wood:0,scrap:0,pistol_ammo:0,shotgun_ammo:0,rifle_ammo:0,smg_ammo:0},
+      resources:{wood:0,scrap:0,parts:0,
+        pistol_ammo:0,shotgun_ammo:0,rifle_ammo:0,smg_ammo:0},
       weapons:[],
+    };
+
+    // Team-shared upgrades (persist for the run)
+    this.teamUpgrades={
+      stash_capacity:0,    // 0..3 — adds 2/4/6 to stash size
+      reinforced_walls:0,  // 0..3 — base barricade HP multiplier
+      sentry_slot:0,       // 0..3 — auto turrets at base entrance
+      conversion:0,        // 0..3 — wood→scrap converter (lower wood per scrap)
+      refinery:0,          // 0..3 — passive ammo per night survived
+      greenhouse:0,        // 0..3 — passive medkit per night survived
     };
 
     // Phase state
@@ -196,7 +480,7 @@ class GameRoom{
     this.nightTimer=0;
     this.sleepUnlockTime=TICK*60;
     this.sleepAvailable=false;
-    this.fightBonus={wood:0,scrap:0,ammo:0,fullNight:false};
+    this.fightBonus={wood:0,scrap:0,ammo:0,parts:0,fullNight:false};
 
     this.zone=null;
     this.scoutReport=this._rollScoutReport();
@@ -210,19 +494,20 @@ class GameRoom{
 
   _rollScoutReport(){
     const sizes=['small','medium','large'];
-    const themes=['mall']; // Stage 1: mall only
-    const hordeFlavors=[
-      'Balanced — mixed types',
-      'Heavy — more bigs',
-      'Swift — more runners',
-      'Loud — more screamers',
-    ];
-    return{theme:pick(themes),size:pick(sizes),hordeFlavor:pick(hordeFlavors)};
-  }
-
-  _stashSize(){
-    const n=this.players.size;
-    return 6+(n>0?(n-1)*2:0);
+    const themes=['mall','hospital','military','suburb'];
+    const theme=pick(themes);
+    // Theme-flavored horde descriptions
+    const flavors={
+      mall:    ['Balanced — mixed types','Loud — more screamers','Swift — more runners','Heavy — more bigs'],
+      hospital:['Screamers swarm the halls','Patient zero outbreak','Crowded — many normals','Echoes of the dying'],
+      military:['Armored juggernauts','Heavy — many bigs','Soldiers turned tanks','Reinforced ranks'],
+      suburb:  ['Track teams sprinting','Swift — many runners','Joggers chase relentlessly','Suburban swarm'],
+    };
+    return{
+      theme,
+      size:pick(sizes),
+      hordeFlavor:pick(flavors[theme]||flavors.mall),
+    };
   }
 
   _activeWorld(){
@@ -277,7 +562,17 @@ class GameRoom{
     return pool[0]||{x:5,y:5};
   }
 
-  _freshLoadout(){return[makeGunSlot('pistol'),null,makeMeleeSlot('knife')];}
+  _freshLoadout(p){
+    const tier=p?.personalUpgrades?.starting_gun||0;
+    // T0: pistol; T1: SMG; T2: Shotgun; T3: Rifle
+    const startGun=['pistol','smg','shotgun','rifle'][tier];
+    const reserveMult=[1,1.25,1.5,1.75][p?.personalUpgrades?.larger_reserves||0];
+    const slot=makeGunSlot(startGun);
+    if(slot){
+      slot.maxReserve=Math.floor(slot.maxReserve*reserveMult);
+    }
+    return[slot,null,makeMeleeSlot('knife')];
+  }
 
   // ── Player ──
   addPlayer(sid,name){
@@ -298,11 +593,22 @@ class GameRoom{
       shootCooldown:0,meleeCooldown:0,
       stamina:100,maxStamina:100,respawnTimer:0,
       nearWeaponId:null,nearDoorId:null,nearTurretId:null,
-      nearStash:false,nearTerminal:false,nearSleep:false,
+      nearStash:false,nearTerminal:false,nearSleep:false,nearWorkshop:false,
       meleeSwinging:false,meleeAngle:0,
       lastVx:0,lastVy:0,
       damageFromX:0,damageFromY:0,damageFromTimer:0,
       atBase: !inZone,
+      // Signature pickup state
+      adrenalineTimer:0,    // ticks remaining of free-sprint buff
+      grenades:0,           // grenade count (throwable)
+      toolboxes:0,          // toolbox count (use to repair barricades)
+      parts:0,              // upgrade currency (carried, deposits to stash)
+      // Personal upgrades — each player gets their own progression
+      personalUpgrades:{
+        starting_gun:0,
+        faster_respawn:0,
+        larger_reserves:0,
+      },
     });
   }
   removePlayer(sid){this.players.delete(sid);this.flows.delete(sid);}
@@ -328,12 +634,63 @@ class GameRoom{
     if(inp.interact&&p.alive)     this._tryInteract(sid,p);
     if(inp.openStash&&p.alive)    this._tryOpenStash(sid,p);
     if(inp.stashOp)               this._handleStashOp(sid,p,inp.stashOp);
+    if(inp.openWorkshop&&p.alive) this._tryOpenWorkshop(sid,p);
+    if(inp.workshopOp)            this._handleWorkshopOp(sid,p,inp.workshopOp);
+    if(inp.throwGrenade&&p.alive) this._tryThrowGrenade(p);
+    if(inp.useToolbox&&p.alive)   this._tryUseToolbox(p);
+    if(inp.useAdrenaline&&p.alive)this._tryUseAdrenaline(p);
+  }
+
+  _tryThrowGrenade(p){
+    if(p.grenades<=0)return;
+    p.grenades--;
+    // Throw grenade in aim direction — 5 second fuse, then explodes
+    const throwDist=200;
+    const fx=p.x+Math.cos(p.angle)*throwDist;
+    const fy=p.y+Math.sin(p.angle)*throwDist;
+    const g={
+      id:this._tick+'-'+Math.random(),
+      x:p.x,y:p.y,tx:fx,ty:fy,
+      vx:Math.cos(p.angle)*8,vy:Math.sin(p.angle)*8,
+      fuse:TICK*2.5, // 2.5 sec fuse mid-flight + after landing
+      owner:p.id,
+    };
+    if(!this.grenadesActive)this.grenadesActive=[];
+    this.grenadesActive.push(g);
+    io.to(this.id).emit('grenadeThrown',{x:p.x,y:p.y,tx:fx,ty:fy,id:g.id});
+  }
+
+  _tryUseToolbox(p){
+    if(p.toolboxes<=0)return;
+    // Repair all friendly barricades + turrets within 100 px
+    let repaired=0;
+    for(const bar of this._allBarricades()){
+      if(Math.hypot(bar.wx-p.x,bar.wy-p.y)<140 && bar.hp<bar.maxHp){
+        bar.hp=bar.maxHp;repaired++;
+      }
+    }
+    for(const t of this._allTurrets()){
+      if(Math.hypot(t.x-p.x,t.y-p.y)<140){
+        t.hp=t.maxHp;t.ammo=t.maxAmmo;repaired++;
+      }
+    }
+    if(repaired>0){
+      p.toolboxes--;
+      io.to(this.id).emit('toolboxUsed',{x:p.x,y:p.y,radius:140,count:repaired});
+    }
+  }
+
+  _tryUseAdrenaline(p){
+    // Adrenaline auto-applies on pickup, but allow manual stack/use too if player has any reserves
+    // Currently it's instant — kept hook for future
+    return;
   }
 
   _tryInteract(sid,p){
     if(p.nearTerminal&&this.phase==='base'){this._startDay();return;}
     if(p.nearSleep&&this.phase==='night'&&this.sleepAvailable){this._sleepThroughNight();return;}
     if(p.nearStash){this._tryOpenStash(sid,p);return;}
+    if(p.nearWorkshop){this._tryOpenWorkshop(sid,p);return;}
     this._tryToggleDoor(p);
   }
 
@@ -411,6 +768,7 @@ class GameRoom{
       // Deposit all carried resources
       this.stash.resources.wood+=p.wood;p.wood=0;
       this.stash.resources.scrap+=p.scrap;p.scrap=0;
+      this.stash.resources.parts+=p.parts;p.parts=0;
       this._broadcastStashToNearby();
     }
     else if(op.action==='withdraw_resources'){
@@ -422,6 +780,7 @@ class GameRoom{
       this.stash.resources[t]-=amt;
       if(t==='wood')p.wood+=amt;
       else if(t==='scrap')p.scrap+=amt;
+      else if(t==='parts')p.parts+=amt;
       else{
         // Ammo into matching gun reserve
         const gunMap={pistol_ammo:'pistol',shotgun_ammo:'shotgun',rifle_ammo:'rifle',smg_ammo:'smg'};
@@ -448,6 +807,123 @@ class GameRoom{
       if(have<=0)return;
       this._handleStashOp(sid,p,{action:'withdraw_resources',type:t,amt:have});
     }
+  }
+
+  // ── Workshop UI ──
+  _workshopSnapshot(sid){
+    const p=this.players.get(sid);
+    return{
+      teamUpgrades:{...this.teamUpgrades},
+      personalUpgrades:p?{...p.personalUpgrades}:{},
+      stashResources:{...this.stash.resources},
+      defs:UPGRADE_DEFS,
+    };
+  }
+
+  _tryOpenWorkshop(sid,p){
+    if(!p.nearWorkshop)return;
+    const sock=socketBySid(sid);
+    if(sock)sock.emit('workshopOpen',this._workshopSnapshot(sid));
+  }
+
+  _broadcastWorkshopToNearby(){
+    for(const[sid,pl]of this.players){
+      if(pl.nearWorkshop){
+        const sock=socketBySid(sid);
+        if(sock)sock.emit('workshopUpdate',this._workshopSnapshot(sid));
+      }
+    }
+  }
+
+  _handleWorkshopOp(sid,p,op){
+    if(!p.nearWorkshop||!op||!op.action)return;
+    if(op.action==='purchase_upgrade'){
+      const key=op.key;
+      const def=UPGRADE_DEFS[key];
+      if(!def)return;
+      const isPersonal=def.scope==='personal';
+      const currentTier=isPersonal?(p.personalUpgrades[key]||0):(this.teamUpgrades[key]||0);
+      if(currentTier>=3)return; // max
+      const nextTier=currentTier+1;
+      const cost=upgradeCost(key,nextTier);
+      if(!cost)return;
+      // Check stash has enough
+      if((this.stash.resources.parts||0)<(cost.parts||0))return;
+      if((this.stash.resources.wood||0)<(cost.wood||0))return;
+      if((this.stash.resources.scrap||0)<(cost.scrap||0))return;
+      // Deduct
+      this.stash.resources.parts-=cost.parts||0;
+      this.stash.resources.wood-=cost.wood||0;
+      this.stash.resources.scrap-=cost.scrap||0;
+      // Apply
+      if(isPersonal) p.personalUpgrades[key]=nextTier;
+      else this.teamUpgrades[key]=nextTier;
+      // Apply immediate effects
+      this._applyUpgradeEffect(key,nextTier,p);
+      this._broadcastWorkshopToNearby();
+      this._broadcastStashToNearby();
+    }
+    else if(op.action==='convert_wood_to_scrap'){
+      const tier=this.teamUpgrades.conversion||0;
+      if(tier<1)return;
+      const ratios=[5,3,2]; // wood per 1 scrap
+      const ratio=ratios[tier-1];
+      const have=this.stash.resources.wood||0;
+      if(have<ratio)return;
+      const amt=op.amt|0||1;
+      const totalWood=Math.min(have,amt*ratio);
+      const actualScrap=Math.floor(totalWood/ratio);
+      const actualWood=actualScrap*ratio;
+      this.stash.resources.wood-=actualWood;
+      this.stash.resources.scrap+=actualScrap;
+      this._broadcastWorkshopToNearby();
+      this._broadcastStashToNearby();
+    }
+  }
+
+  _applyUpgradeEffect(key,tier,p){
+    // Apply effect immediately at purchase time where appropriate.
+    if(key==='reinforced_walls'){
+      // Multiply HP of existing base barricades
+      const mults=[1.5,2.0,2.5];
+      const m=mults[tier-1];
+      for(const bar of this.baseBarricades){
+        // Recalculate to new base
+        const baseHp=bar.isMetal?350:150;
+        bar.maxHp=baseHp*m;
+        bar.hp=Math.min(bar.maxHp,bar.hp*m);
+      }
+    } else if(key==='sentry_slot'){
+      // Spawn a new sentry at base entrance corridor
+      const sentryX=BASE_LAYOUT.exitTx*TILE+TILE/2+(tier-2)*TILE;
+      const sentryY=(BASE_H-3)*TILE+TILE/2;
+      const sentry={
+        id:this.ntid++,x:sentryX,y:sentryY,
+        angle:0,ammo:60,maxAmmo:60,cooldown:0,
+        hp:120,maxHp:120,
+        sentry:true,             // persistent + auto-regen ammo
+      };
+      this.baseTurrets.push(sentry);
+      io.to(this.id).emit('turretAdded',sentry);
+    } else if(key==='larger_reserves'){
+      // Recompute current player's gun reserve caps
+      const mults=[1.25,1.5,1.75];
+      const m=mults[tier-1];
+      for(const slot of p.slots){
+        if(slot&&slot.kind==='gun'){
+          const wd=WDEFS[slot.type];
+          slot.maxReserve=Math.floor(wd.maxReserve*m);
+        }
+      }
+    }
+  }
+
+  _stashSize(){
+    const n=this.players.size;
+    const baseSize=6+(n>0?(n-1)*2:0);
+    const upTier=this.teamUpgrades?.stash_capacity||0;
+    const upBonuses=[0,2,4,6];
+    return baseSize+upBonuses[upTier];
   }
 
   _tryPickup(sid,p){
@@ -536,9 +1012,10 @@ class GameRoom{
   // ── Phase Transitions ──
   _startDay(){
     if(this.phase!=='base')return;
-    this.zone=generateMallZone(this.scoutReport.size);
+    this.zone=generateZone(this.scoutReport.theme,this.scoutReport.size);
+    this.zone.theme=this.scoutReport.theme;
     this.barricades=[];this.turrets=[];
-    this.zombies=[];this.bullets=[];this.pickups=[];this.groundWeapons=[];
+    this.zombies=[];this.bullets=[];this.pickups=[];this.groundWeapons=[];this.grenadesActive=[];
     this.flows=new Map();
     this._spawnZombiesInZone();
     this._spawnLootInZone();
@@ -557,11 +1034,79 @@ class GameRoom{
     });
   }
 
+  _hordeTypesForTheme(theme){
+    // Strong tilt — each theme dramatically biases zombie types
+    switch(theme){
+      case 'hospital':
+        return ['normal','normal','normal','normal','screamer','screamer','screamer','runner'];
+      case 'military':
+        return ['big','big','big','big','normal','normal','runner'];
+      case 'suburb':
+        return ['runner','runner','runner','runner','runner','normal','normal'];
+      case 'mall':
+      default:
+        return ['normal','normal','normal','big','runner','screamer'];
+    }
+  }
+
+  _signaturePickupForTheme(theme){
+    // Each theme has a unique signature pickup
+    switch(theme){
+      case 'hospital': return 'adrenaline';
+      case 'military': return 'grenade';
+      case 'suburb':   return 'toolbox';
+      default: return null;
+    }
+  }
+
+  _lootBiasForTheme(theme){
+    // Strong tilt — 90% of theme's specialty, 10% general
+    // Returns { generalPickups: [array biased toward specialty], gunWeights: { gun: weight } }
+    const SIG=this._signaturePickupForTheme(theme);
+    switch(theme){
+      case 'hospital':
+        return{
+          // 90% medkits/scrap; 10% general
+          general:['medkit','medkit','medkit','medkit','medkit','medkit','medkit','medkit','scrap','wood'],
+          // Loot room ammo specialty: pistol-heavy
+          ammo:['pistol_ammo','pistol_ammo','smg_ammo','rifle_ammo','shotgun_ammo'],
+          // Gun spawn weighting: lots of pistols (hospital security), few rifles
+          gunMix:['pistol','pistol','pistol','smg','shotgun','rifle'],
+          signature:SIG,
+        };
+      case 'military':
+        return{
+          // 90% guns/ammo focus; less general supply
+          general:['scrap','scrap','medkit','wood','scrap'],
+          ammo:['rifle_ammo','rifle_ammo','rifle_ammo','shotgun_ammo','shotgun_ammo','smg_ammo','pistol_ammo'],
+          gunMix:['rifle','rifle','rifle','shotgun','smg','pistol'],
+          signature:SIG,
+        };
+      case 'suburb':
+        return{
+          // 90% wood/tools focus
+          general:['wood','wood','wood','wood','wood','wood','wood','wood','medkit','scrap'],
+          ammo:['pistol_ammo','pistol_ammo','shotgun_ammo','smg_ammo','rifle_ammo'],
+          // Suburban: lots of pistols + shotguns (home defense), few rifles
+          gunMix:['pistol','pistol','shotgun','shotgun','smg','rifle'],
+          signature:SIG,
+        };
+      case 'mall':
+      default:
+        return{
+          general:['medkit','medkit','wood','wood','wood','scrap'],
+          ammo:['pistol_ammo','shotgun_ammo','rifle_ammo','smg_ammo'],
+          gunMix:['pistol','shotgun','rifle','smg'],
+          signature:null,
+        };
+    }
+  }
+
   _spawnZombiesInZone(){
     if(!this.zone)return;
     const pool=[...this.zone.ft.indoor,...this.zone.ft.court];
     const total=20+this.day*4;
-    const types=['normal','normal','normal','big','runner','screamer'];
+    const types=this._hordeTypesForTheme(this.zone.theme);
     for(let i=0;i<total;i++){
       const t=this._safeTile(pool);
       if(Math.abs(t.x-this.zone.entryX)<8&&t.y<this.zone.entryY+12)continue;
@@ -573,16 +1118,18 @@ class GameRoom{
   _spawnLootInZone(){
     if(!this.zone)return;
     const pool=[...this.zone.ft.indoor,...this.zone.ft.court];
+    const bias=this._lootBiasForTheme(this.zone.theme);
+
+    // General pickups (theme-biased)
     for(let i=0;i<20;i++){
       const t=this._safeTile(pool);
-      const types=['medkit','medkit','wood','wood','wood','scrap'];
       this.pickups.push({id:this.npid++,x:t.x*TILE+TILE/2,y:t.y*TILE+TILE/2,
-        type:pick(types),amount:rng(15,30)});
+        type:pick(bias.general),amount:rng(15,30)});
     }
-    const gunTypes=['shotgun','rifle','smg','pistol'];
+    // Ground guns (theme-biased mix)
     for(let i=0;i<14;i++){
       const t=this._safeTile(pool);
-      const type=pick(gunTypes);const wd=WDEFS[type];
+      const type=pick(bias.gunMix);const wd=WDEFS[type];
       this.groundWeapons.push({
         id:this.ngwid++,x:t.x*TILE+TILE/2,y:t.y*TILE+TILE/2,
         kind:'gun',type,name:wd.name,
@@ -590,6 +1137,7 @@ class GameRoom{
         reserve:Math.floor(wd.maxReserve*0.3),maxReserve:wd.maxReserve,
       });
     }
+    // Ground melee (universal)
     const melTypes=['bat','axe','machete'];
     for(let i=0;i<4;i++){
       const t=this._safeTile(pool);
@@ -599,9 +1147,19 @@ class GameRoom{
         kind:'melee',type,name:md.name,
       });
     }
+    // Signature pickups — only spawn in non-mall themes
+    if(bias.signature){
+      const sigCount=3+Math.floor((this.zone.lootRooms.length||1)/2);
+      for(let i=0;i<sigCount;i++){
+        const t=this._safeTile(pool);
+        this.pickups.push({id:this.npid++,x:t.x*TILE+TILE/2,y:t.y*TILE+TILE/2,
+          type:bias.signature,amount:1,signature:true});
+      }
+    }
+    // Loot rooms — extra-good gear
     for(const r of this.zone.lootRooms){
       const tx=rng(r.x+1,r.x+r.w-2),ty=rng(r.y+1,r.y+r.h-2);
-      const type=pick(['shotgun','rifle','smg']);
+      const type=pick(bias.gunMix.filter(g=>g!=='pistol'));
       const wd=WDEFS[type];
       this.groundWeapons.push({
         id:this.ngwid++,x:tx*TILE+TILE/2,y:ty*TILE+TILE/2,
@@ -610,15 +1168,22 @@ class GameRoom{
         reserve:Math.floor(wd.maxReserve*0.7),maxReserve:wd.maxReserve,
         loot:true,
       });
+      // Loot room ammo (theme-biased)
       for(let i=0;i<rng(3,5);i++){
         const tx2=rng(r.x+1,r.x+r.w-2),ty2=rng(r.y+1,r.y+r.h-2);
-        const ammoTypes=['pistol_ammo','shotgun_ammo','rifle_ammo','smg_ammo'];
         this.pickups.push({id:this.npid++,x:tx2*TILE+TILE/2,y:ty2*TILE+TILE/2,
-          type:pick(ammoTypes),amount:rng(8,18),loot:true});
+          type:pick(bias.ammo),amount:rng(8,18),loot:true});
       }
+      // Always a medkit in loot rooms
       const tx3=rng(r.x+1,r.x+r.w-2),ty3=rng(r.y+1,r.y+r.h-2);
       this.pickups.push({id:this.npid++,x:tx3*TILE+TILE/2,y:ty3*TILE+TILE/2,
         type:'medkit',amount:40,loot:true});
+      // Bonus signature pickup in loot rooms
+      if(bias.signature){
+        const tx4=rng(r.x+1,r.x+r.w-2),ty4=rng(r.y+1,r.y+r.h-2);
+        this.pickups.push({id:this.npid++,x:tx4*TILE+TILE/2,y:ty4*TILE+TILE/2,
+          type:bias.signature,amount:1,signature:true,loot:true});
+      }
     }
   }
 
@@ -639,7 +1204,7 @@ class GameRoom{
     // Unload zone
     this.zone=null;
     this.barricades=[];this.turrets=[];
-    this.zombies=[];this.bullets=[];this.pickups=[];this.groundWeapons=[];
+    this.zombies=[];this.bullets=[];this.pickups=[];this.groundWeapons=[];this.grenadesActive=[];
     this.flows=new Map();
     for(const p of this.players.values()){
       p.x=BASE_LAYOUT.spawnTx*TILE+TILE/2+rng(-30,30);
@@ -663,11 +1228,30 @@ class GameRoom{
     // Distribute fight bonuses to stash
     if(this.fightBonus.wood>0)this.stash.resources.wood+=this.fightBonus.wood;
     if(this.fightBonus.scrap>0)this.stash.resources.scrap+=this.fightBonus.scrap;
+    if(this.fightBonus.parts>0)this.stash.resources.parts+=this.fightBonus.parts;
     if(this.fightBonus.ammo>0){
       for(let i=0;i<this.fightBonus.ammo;i++){
         const t=pick(['pistol_ammo','shotgun_ammo','rifle_ammo','smg_ammo']);
         this.stash.resources[t]++;
       }
+    }
+    // Apply Refinery upgrade — passive ammo per night survived
+    const refTier=this.teamUpgrades.refinery||0;
+    if(refTier>0){
+      const ammoBonus=[0,5,10,20][refTier];
+      for(let i=0;i<ammoBonus;i++){
+        const t=pick(['pistol_ammo','shotgun_ammo','rifle_ammo','smg_ammo']);
+        this.stash.resources[t]++;
+      }
+      this.fightBonus.refineryAmmo=ammoBonus;
+    }
+    // Apply Greenhouse upgrade — passive medkit pickups added to morning summary
+    const ghTier=this.teamUpgrades.greenhouse||0;
+    if(ghTier>0){
+      const medkits=[0,1,2,3][ghTier];
+      // Spawn medkits in stash as a pseudo-resource — store in resources.medkit_count
+      this.stash.resources.medkit_count=(this.stash.resources.medkit_count||0)+medkits;
+      this.fightBonus.greenhouseMed=medkits;
     }
     if(this.fightBonus.fullNight){
       const rares=['rifle','shotgun','smg'];
@@ -684,7 +1268,7 @@ class GameRoom{
 
   _enterBase(){
     this.phase='base';this.day++;
-    this.zombies=[];this.bullets=[];this.pickups=[];this.groundWeapons=[];
+    this.zombies=[];this.bullets=[];this.pickups=[];this.groundWeapons=[];this.grenadesActive=[];
     this.scoutReport=this._rollScoutReport();
     for(const p of this.players.values()){
       p.hp=p.maxHp;p.alive=true;p.respawnTimer=0;
@@ -720,7 +1304,7 @@ class GameRoom{
         io.to(this.id).emit('groundWeaponAdded',dropped);
       }
     }
-    p.slots=this._freshLoadout();p.activeSlot=0;
+    p.slots=this._freshLoadout(p);p.activeSlot=0;
     p.wood=0;p.scrap=0;
   }
 
@@ -808,6 +1392,7 @@ class GameRoom{
 
     this._tickPlayers();
     this._tickBullets();
+    this._tickGrenades();
     if(this._atZonePhase()||this.phase==='night')this._tickZombies();
     if(this._atZonePhase()||this.phase==='night')this._tickTurrets();
 
@@ -825,9 +1410,12 @@ class GameRoom{
   _tickPlayers(){
     for(const[sid,p]of this.players){
       if(!p.alive)continue;
-      const canSprint=p.sprinting&&(p.dx||p.dy)&&p.stamina>0;
+      // Decay adrenaline timer
+      if(p.adrenalineTimer>0)p.adrenalineTimer--;
+      const onAdrenaline=p.adrenalineTimer>0;
+      const canSprint=p.sprinting&&(p.dx||p.dy)&&(p.stamina>0||onAdrenaline);
       const spd=canSprint?5.0:3.0;
-      if(canSprint)p.stamina=Math.max(0,p.stamina-1.5);
+      if(canSprint&&!onAdrenaline)p.stamina=Math.max(0,p.stamina-1.5);
       else p.stamina=Math.min(p.maxStamina,p.stamina+0.6);
       let dxMove=0,dyMove=0;
       if(p.dx||p.dy){
@@ -887,6 +1475,18 @@ class GameRoom{
               if(z.hp<=0){
                 p.kills++;p.sessionKills++;
                 io.to(this.id).emit('killFeed',{killer:p.name,killerId:sid,zombieType:z.type});
+                // Parts drop — uncommon (18% per kill)
+                if(Math.random()<0.18){
+                  const pk={id:this.npid++,x:z.x,y:z.y,type:'parts',amount:1};
+                  this.pickups.push(pk);io.to(this.id).emit('pickupSpawned',pk);
+                }
+                if(this.phase==='night'){
+                  const r=Math.random();
+                  if(r<0.30)this.fightBonus.wood+=rng(2,5);
+                  else if(r<0.50)this.fightBonus.scrap+=rng(1,2);
+                  else if(r<0.65)this.fightBonus.ammo+=rng(1,3);
+                  else if(r<0.78)this.fightBonus.parts=(this.fightBonus.parts||0)+1;
+                }
                 io.to(this.id).emit('zombieKilled',{id:z.id,x:z.x,y:z.y});
                 this.zombies=this.zombies.filter(zz=>zz.id!==z.id);
               }
@@ -898,7 +1498,7 @@ class GameRoom{
 
       // Near detection
       p.nearWeaponId=null;p.nearDoorId=null;p.nearTurretId=null;
-      p.nearStash=false;p.nearTerminal=false;p.nearSleep=false;
+      p.nearStash=false;p.nearTerminal=false;p.nearSleep=false;p.nearWorkshop=false;
       for(const gw of this.groundWeapons){
         if(Math.hypot(gw.x-p.x,gw.y-p.y)<58){p.nearWeaponId=gw.id;break;}
       }
@@ -913,14 +1513,19 @@ class GameRoom{
         const stx=BASE_LAYOUT.stashTx*TILE+TILE/2,sty=BASE_LAYOUT.stashTy*TILE+TILE/2;
         if(Math.hypot(stx-p.x,sty-p.y)<60){
           p.nearStash=true;
-          // Auto-deposit resources (Turn 1 stub — wired UI is Turn 2)
+          // Auto-deposit resources (parts deposit too)
           if(p.wood>0){this.stash.resources.wood+=p.wood;p.wood=0;}
           if(p.scrap>0){this.stash.resources.scrap+=p.scrap;p.scrap=0;}
+          if(p.parts>0){this.stash.resources.parts+=p.parts;p.parts=0;}
         }
         const ttx=BASE_LAYOUT.terminalTx*TILE+TILE/2,tty=BASE_LAYOUT.terminalTy*TILE+TILE/2;
         if(Math.hypot(ttx-p.x,tty-p.y)<55) p.nearTerminal=true;
         if(this.phase==='night'&&Math.hypot(ttx-p.x,tty-p.y)<55) p.nearSleep=true;
-      }
+        // Workshop detection
+        const wpx=BASE_LAYOUT.workshopTx*TILE+TILE/2,wpy=BASE_LAYOUT.workshopTy*TILE+TILE/2;
+        if(Math.hypot(wpx-p.x,wpy-p.y)<70) p.nearWorkshop=true;
+        else p.nearWorkshop=false;
+      } else { p.nearWorkshop=false; }
       // Auto-extract zone exit during extract
       if(this.phase==='extract'&&this.zone){
         const ex=this.zone.entryX*TILE+TILE/2;
@@ -941,6 +1546,7 @@ class GameRoom{
         if(pk.type==='medkit'&&p.hp<p.maxHp){p.hp=Math.min(p.maxHp,p.hp+pk.amount);ok=true;}
         else if(pk.type==='wood'){p.wood+=pk.amount;ok=true;}
         else if(pk.type==='scrap'){p.scrap+=pk.amount;ok=true;}
+        else if(pk.type==='parts'){p.parts=(p.parts||0)+pk.amount;ok=true;}
         else if(ammoMap[pk.type]){
           const wType=ammoMap[pk.type];
           for(const sw of p.slots){
@@ -949,6 +1555,10 @@ class GameRoom{
             }
           }
         }
+        // Signature pickups
+        else if(pk.type==='adrenaline'){p.adrenalineTimer+=TICK*5;ok=true;}
+        else if(pk.type==='grenade'){p.grenades+=1;ok=true;}
+        else if(pk.type==='toolbox'){p.toolboxes+=1;ok=true;}
         if(ok)io.to(this.id).emit('pickupTaken',{id:pk.id,pid:sid});
         return!ok;
       });
@@ -972,6 +1582,11 @@ class GameRoom{
             const kp=isTurret?null:this.players.get(b.owner);
             if(kp){kp.kills++;kp.sessionKills++;}
             io.to(this.id).emit('killFeed',{killer:isTurret?'Turret':(kp?.name||'?'),killerId:b.owner,zombieType:z.type});
+            // Parts drop — uncommon (15-20% per kill, 1 part each)
+            if(Math.random()<0.18){
+              const pk={id:this.npid++,x:z.x,y:z.y,type:'parts',amount:1};
+              this.pickups.push(pk);io.to(this.id).emit('pickupSpawned',pk);
+            }
             if(Math.random()<0.05){
               const ammoTypes=['pistol_ammo','shotgun_ammo','rifle_ammo','smg_ammo'];
               const pk={id:this.npid++,x:z.x,y:z.y,type:pick(ammoTypes),amount:rng(2,6)};
@@ -989,6 +1604,7 @@ class GameRoom{
               if(r<0.30)this.fightBonus.wood+=rng(2,5);
               else if(r<0.50)this.fightBonus.scrap+=rng(1,2);
               else if(r<0.65)this.fightBonus.ammo+=rng(1,3);
+              else if(r<0.78)this.fightBonus.parts=(this.fightBonus.parts||0)+1;
             }
             io.to(this.id).emit('zombieKilled',{id:z.id,x:z.x,y:z.y});
             this.zombies=this.zombies.filter(zz=>zz.id!==z.id);
@@ -999,6 +1615,52 @@ class GameRoom{
       return b.life>0;
     });
     this.gunshots=this.gunshots.filter(g=>{g.life--;return g.life>0;});
+  }
+
+  _tickGrenades(){
+    if(!this.grenadesActive||this.grenadesActive.length===0)return;
+    for(const g of this.grenadesActive){
+      // Travel toward target until close, then stop and tick fuse
+      const dxT=g.tx-g.x, dyT=g.ty-g.y, dT=Math.hypot(dxT,dyT);
+      if(dT>10){
+        g.x+=g.vx; g.y+=g.vy;
+        // Wall stop
+        if(this.isSolid(Math.floor(g.x/TILE),Math.floor(g.y/TILE))){
+          g.x-=g.vx;g.y-=g.vy;g.vx=0;g.vy=0;g.tx=g.x;g.ty=g.y;
+        }
+      }
+      g.fuse--;
+      if(g.fuse<=0){
+        // Explode!
+        const radius=110;
+        for(const z of this.zombies){
+          const d=Math.hypot(z.x-g.x,z.y-g.y);
+          if(d<radius){
+            // Damage falls off with distance
+            const dmg=Math.max(40,90*(1-d/radius));
+            z.hp-=dmg;
+            // Knockback away from blast
+            if(d>0){
+              z.knockbackVx=(z.x-g.x)/d*8;
+              z.knockbackVy=(z.y-g.y)/d*8;
+            }
+            if(z.hp<=0){
+              const kp=this.players.get(g.owner);
+              if(kp){kp.kills++;kp.sessionKills++;}
+              io.to(this.id).emit('killFeed',{killer:kp?.name||'?',killerId:g.owner,zombieType:z.type});
+              io.to(this.id).emit('zombieKilled',{id:z.id,x:z.x,y:z.y});
+            }
+          }
+        }
+        this.zombies=this.zombies.filter(z=>z.hp>0);
+        // Damage barricades too (friendly fire)
+        for(const bar of this._allBarricades()){
+          if(Math.hypot(bar.wx-g.x,bar.wy-g.y)<radius) bar.hp-=30;
+        }
+        io.to(this.id).emit('grenadeExplode',{x:g.x,y:g.y,radius});
+      }
+    }
+    this.grenadesActive=this.grenadesActive.filter(g=>g.fuse>0);
   }
 
   _tickZombies(){
@@ -1119,9 +1781,10 @@ class GameRoom{
           z.attackTimer=0;nearP.hp-=z.damage;
           nearP.damageFromX=z.x;nearP.damageFromY=z.y;nearP.damageFromTimer=TICK*1.5;
           if(nearP.hp<=0){
-            nearP.hp=0;nearP.alive=false;nearP.respawnTimer=TICK*12;
+            const respawnSecs=[12,9,6,4][nearP.personalUpgrades?.faster_respawn||0];
+            nearP.hp=0;nearP.alive=false;nearP.respawnTimer=TICK*respawnSecs;
             this._dropWeaponsAtDeath(nearP);
-            io.to(this.id).emit('playerDied',{id:nearP.id,kills:nearP.kills,day:this.day,respawnIn:12});
+            io.to(this.id).emit('playerDied',{id:nearP.id,kills:nearP.kills,day:this.day,respawnIn:respawnSecs});
           }
         }
       }else if(!hitObstacle)z.attackTimer=Math.max(0,z.attackTimer-1);
@@ -1132,6 +1795,8 @@ class GameRoom{
     const turrets=this._allTurrets();
     for(const t of turrets){
       if(t.cooldown>0)t.cooldown--;
+      // Sentry slot: passive ammo regen at base (1 ammo every 30 ticks = 1.5s)
+      if(t.sentry && t.ammo<t.maxAmmo && (this._tick%30)===0)t.ammo++;
       if(t.ammo<=0||t.hp<=0)continue;
       let nearest=null,nearestD=300;
       for(const z of this.zombies){
@@ -1176,13 +1841,17 @@ class GameRoom{
         id:p.id,name:p.name,x:p.x,y:p.y,angle:p.angle,hp:p.hp,maxHp:p.maxHp,
         alive:p.alive,respawnTimer:p.respawnTimer,activeSlot:p.activeSlot,
         slots:p.slots,reloading:p.reloading,reloadTimer:p.reloadTimer,reloadMax:p.reloadMax,
-        wood:p.wood,scrap:p.scrap,kills:p.kills,sessionKills:p.sessionKills,
+        wood:p.wood,scrap:p.scrap,parts:p.parts||0,kills:p.kills,sessionKills:p.sessionKills,
         stamina:p.stamina,maxStamina:p.maxStamina,sprinting:p.sprinting,
         nearWeaponId:p.nearWeaponId,nearDoorId:p.nearDoorId,nearTurretId:p.nearTurretId,
-        nearStash:p.nearStash,nearTerminal:p.nearTerminal,nearSleep:p.nearSleep,
+        nearStash:p.nearStash,nearTerminal:p.nearTerminal,nearSleep:p.nearSleep,nearWorkshop:p.nearWorkshop,
         meleeSwinging:p.meleeSwinging,meleeAngle:p.meleeAngle,
         damageFromX:p.damageFromX,damageFromY:p.damageFromY,damageFromTimer:p.damageFromTimer,
         atBase:p.atBase,
+        adrenalineTimer:p.adrenalineTimer||0,
+        grenades:p.grenades||0,
+        toolboxes:p.toolboxes||0,
+        personalUpgrades:p.personalUpgrades||{},
       })),
       zombies:this.zombies.map(z=>({id:z.id,x:z.x,y:z.y,hp:z.hp,maxHp:z.maxHp,
         angle:z.angle,type:z.type,screaming:z.screaming,screamRadius:z.screamRadius||0})),
@@ -1191,6 +1860,7 @@ class GameRoom{
       turrets:this._allTurrets(),
       groundWeapons:this.groundWeapons,
       pickups:this.pickups,
+      grenades:(this.grenadesActive||[]).map(g=>({id:g.id,x:g.x,y:g.y,fuse:g.fuse})),
       day:this.day,
       phase:this.phase,
       zoneTimer:this.zoneTimer,nightTimer:this.nightTimer,phaseTimer:this.phaseTimer,
@@ -1199,6 +1869,8 @@ class GameRoom{
       scoutReport:this.scoutReport,
       stashSize:this._stashSize(),
       stashCount:this.stash.weapons.length,
+      zoneTheme:this.zone?this.zone.theme:null,
+      teamUpgrades:{...this.teamUpgrades},
     };
     io.to(this.id).emit('state',snap);
   }
@@ -1239,8 +1911,12 @@ io.on('connection',socket=>{
   socket.on('pickup', ()=>{if(room)room.handleInput(socket.id,{pickupWeapon:true});});
   socket.on('door',   ()=>{if(room)room.handleInput(socket.id,{toggleDoor:true});});
   socket.on('interact',()=>{if(room)room.handleInput(socket.id,{interact:true});});
+  socket.on('throwGrenade',()=>{if(room)room.handleInput(socket.id,{throwGrenade:true});});
+  socket.on('useToolbox',()=>{if(room)room.handleInput(socket.id,{useToolbox:true});});
   socket.on('openStash',()=>{if(room)room.handleInput(socket.id,{openStash:true});});
   socket.on('stashOp',op=>{if(room)room.handleInput(socket.id,{stashOp:op});});
+  socket.on('openWorkshop',()=>{if(room)room.handleInput(socket.id,{openWorkshop:true});});
+  socket.on('workshopOp',op=>{if(room)room.handleInput(socket.id,{workshopOp:op});});
   socket.on('ping',   d=>{if(room)room.handlePing(socket.id,d);});
   socket.on('chat',   m=>{if(room)room.handleChat(socket.id,m);});
   socket.on('disconnect',()=>{
