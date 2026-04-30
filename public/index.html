@@ -170,17 +170,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
 #stashOverlay{
   position:absolute;top:0;left:0;width:100%;height:100%;
   background:rgba(0,0,0,0.85);display:none;z-index:150;
-  pointer-events:all;
+  pointer-events:auto;
   align-items:center;justify-content:center;flex-direction:column;
 }
+#stashOverlay *{pointer-events:auto;}
 
 /* ── Workshop UI overlay ── */
 #workshopOverlay{
   position:absolute;top:0;left:0;width:100%;height:100%;
   background:rgba(0,0,0,0.88);display:none;z-index:160;
-  pointer-events:all;
+  pointer-events:auto;
   align-items:center;justify-content:center;flex-direction:column;
 }
+#workshopOverlay *{pointer-events:auto;}
 #workshopPanel{
   width:90%;max-width:880px;max-height:90vh;overflow-y:auto;
   background:#161620;border:1px solid #4af;border-radius:8px;
@@ -725,6 +727,11 @@ function gatherInput(){
   if(keys['d']||keys['arrowright'])dx+=1;
   if(keys['w']||keys['arrowup'])dy-=1;
   if(keys['s']||keys['arrowdown'])dy+=1;
+  // B6 fix: recompute mouse world position from current camera every tick
+  // Otherwise the cached wx/wy goes stale as the camera follows the player,
+  // causing a phantom angle drift opposite to movement direction.
+  mouse.wx=mouse.x+camera.x;
+  mouse.wy=mouse.y+camera.y;
   const ang=myPlayer?Math.atan2(mouse.wy-myPlayer.y,mouse.wx-myPlayer.x):0;
   const inp={dx,dy,angle:ang,
     shooting:mouse.left&&!buildMode,
@@ -965,14 +972,16 @@ function openStashUI(){
   if(!stashData)return;
   stashOpen=true;
   document.getElementById('stashOverlay').style.display='flex';
-  // Free the cursor
+  // B5 fix: free the cursor and disable canvas pointer-events so clicks pass to overlay
   document.getElementById('gameCanvas').style.cursor='default';
+  document.getElementById('gameCanvas').style.pointerEvents='none';
   renderStashUI();
 }
 function closeStashUI(){
   stashOpen=false;
   document.getElementById('stashOverlay').style.display='none';
   document.getElementById('gameCanvas').style.cursor='none';
+  document.getElementById('gameCanvas').style.pointerEvents='auto';
 }
 
 const RESOURCE_LABELS={
@@ -1078,12 +1087,14 @@ function openWorkshopUI(){
   workshopOpen=true;
   document.getElementById('workshopOverlay').style.display='flex';
   document.getElementById('gameCanvas').style.cursor='default';
+  document.getElementById('gameCanvas').style.pointerEvents='none';
   renderWorkshopUI();
 }
 function closeWorkshopUI(){
   workshopOpen=false;
   document.getElementById('workshopOverlay').style.display='none';
   document.getElementById('gameCanvas').style.cursor='none';
+  document.getElementById('gameCanvas').style.pointerEvents='auto';
 }
 
 function renderWorkshopUI(){

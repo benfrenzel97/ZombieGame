@@ -125,20 +125,22 @@ function generateBase(){
   for(let y=2;y<BASE_H-2;y++) tiles[y][22]=T_WALL; // stash | hub
   for(let y=2;y<BASE_H-2;y++) tiles[y][42]=T_WALL; // hub | workshop
   for(let x=2;x<22;x++)   tiles[22][x]=T_WALL;     // stash | sleep
-  for(let x=22;x<42;x++)  tiles[22][x]=T_WALL;     // hub | terminal
+  for(let x=22;x<42;x++)  tiles[22][x]=T_WALL;     // hub | (lower hub)
   // Door openings (3 tiles each)
   for(let dy=0;dy<3;dy++) tiles[10+dy][22]=T_BASE_HUB;
   for(let dy=0;dy<3;dy++) tiles[10+dy][42]=T_BASE_HUB;
   for(let dx=0;dx<3;dx++) tiles[22][30+dx]=T_BASE_HUB;
   for(let dx=0;dx<3;dx++) tiles[22][10+dx]=T_BASE_HUB;
-  // Exit corridor (south)
+  // Exit corridor (south) — open it through to the workshop room interior
   for(let x=46;x<=50;x++) for(let y=BASE_H-2;y<BASE_H;y++) tiles[y][x]=T_CORRIDOR;
+  // Make sure the workshop room floor extends down to the corridor
+  for(let x=46;x<=50;x++) for(let y=BASE_H-5;y<BASE_H-2;y++) tiles[y][x]=T_BASE_HUB;
   return tiles;
 }
 
 const BASE_LAYOUT={
   stashTx: 11, stashTy: 10,
-  terminalTx: 32, terminalTy: 28,
+  terminalTx: 48, terminalTy: BASE_H-5,    // moved next to exit corridor (south side, near gate)
   spawnTx: 11, spawnTy: 32,
   exitTx: 48, exitTy: BASE_H-1,
   workshopTx: 50, workshopTy: 18,
@@ -185,39 +187,76 @@ function generateHospitalZone(size){
   const W=cfg.w, H=cfg.h;
   const tiles=Array.from({length:H},()=>new Array(W).fill(T_WALL));
   const BORD=4;
-  // Start with everything as walls (T_WALL), then carve narrow hallways and small rooms
-  // Build a grid of small rooms separated by hallways
-  const ROOM_W=6, ROOM_H=5, HALL=3;
-  const cellW=ROOM_W+HALL, cellH=ROOM_H+HALL;
   const lootRooms=[];
-  // Carve main horizontal hallway
-  const mainHallY=Math.floor(H/2);
-  for(let x=BORD;x<W-BORD;x++) for(let dy=-1;dy<=1;dy++) tiles[mainHallY+dy][x]=T_FLOOR;
-  // Carve vertical hallways at intervals
-  for(let cx=BORD+ROOM_W;cx<W-BORD;cx+=cellW){
-    for(let y=BORD;y<H-BORD;y++) for(let dx=-1;dx<=1;dx++){
-      if(cx+dx>=BORD&&cx+dx<W-BORD)tiles[y][cx+dx]=T_FLOOR;
+
+  // B7/B8 fix: clean ward layout
+  // Layout pattern (vertical slice, repeats):
+  //   [HALL 3w] [ROOM 7w] [HALL 3w] [ROOM 7w] ...
+  // Same for vertical: alternating hallway rows and room rows.
+  // Doors always open onto a hallway tile that's already cleared.
+  const ROOM_W=7, ROOM_H=6;
+  const HALL_W=3;
+
+  // Carve all horizontal hallways first
+  for(let y=BORD; y<H-BORD; y++){
+    // Row pattern: hallway row if (y - BORD) % (ROOM_H + HALL_W) is within HALL_W
+    const yp=(y-BORD)%(ROOM_H+HALL_W);
+    if(yp<HALL_W){
+      for(let x=BORD;x<W-BORD;x++) tiles[y][x]=T_FLOOR;
     }
   }
-  // Carve small rooms in the cells
-  for(let gy=BORD;gy<H-BORD-ROOM_H-2;gy+=cellH){
-    for(let gx=BORD;gx<W-BORD-ROOM_W-2;gx+=cellW){
-      // Skip rooms that overlap main hallways
-      if(Math.abs(gy+ROOM_H/2-mainHallY)<3)continue;
-      const isLoot=(lootRooms.length<cfg.loot)&&(Math.random()<0.45);
-      carveRoom(tiles,gx,gy,ROOM_W,ROOM_H,isLoot?T_LOOT:T_FLOOR);
+  // Carve all vertical hallways
+  for(let x=BORD; x<W-BORD; x++){
+    const xp=(x-BORD)%(ROOM_W+HALL_W);
+    if(xp<HALL_W){
+      for(let y=BORD;y<H-BORD;y++) tiles[y][x]=T_FLOOR;
+    }
+  }
+
+  // Now carve rooms in the cell areas (between hallways)
+  // A room sits at cells: x = BORD + HALL_W + n*(ROOM_W+HALL_W), y similarly
+  for(let gy=BORD+HALL_W; gy<H-BORD-ROOM_H; gy+=(ROOM_H+HALL_W)){
+    for(let gx=BORD+HALL_W; gx<W-BORD-ROOM_W; gx+=(ROOM_W+HALL_W)){
+      // Random loot or regular
+      const isLoot=(lootRooms.length<cfg.loot)&&(Math.random()<0.5);
+      const roomFill=isLoot?T_LOOT:T_FLOOR;
+      // Carve room walls + interior
+      for(let y=gy;y<gy+ROOM_H;y++) for(let x=gx;x<gx+ROOM_W;x++) tiles[y][x]=T_WALL;
+      for(let y=gy+1;y<gy+ROOM_H-1;y++) for(let x=gx+1;x<gx+ROOM_W-1;x++) tiles[y][x]=roomFill;
       if(isLoot)lootRooms.push({x:gx,y:gy,w:ROOM_W,h:ROOM_H});
-      // Doorway facing nearest hallway
+
+      // 1-2 doors per room, randomly choose sides facing hallways
+      const doorSides=[];
+      // North side opens to hallway above (which exists by grid design)
+      if(gy>BORD)doorSides.push('N');
+      // South
+      if(gy+ROOM_H<H-BORD)doorSides.push('S');
+      // West
+      if(gx>BORD)doorSides.push('W');
+      // East
+      if(gx+ROOM_W<W-BORD)doorSides.push('E');
+      // Pick 1-2 doors
+      const numDoors=rng(1,Math.min(2,doorSides.length));
+      // Shuffle
+      for(let i=doorSides.length-1;i>0;i--){
+        const j=rng(0,i);[doorSides[i],doorSides[j]]=[doorSides[j],doorSides[i]];
+      }
+      const chosen=doorSides.slice(0,numDoors);
       const doorX=gx+Math.floor(ROOM_W/2), doorY=gy+Math.floor(ROOM_H/2);
-      // Always put a door on the side closest to a hallway
-      if(gy+ROOM_H<mainHallY) tiles[gy+ROOM_H-1][doorX]=T_FLOOR;
-      else if(gy>mainHallY) tiles[gy][doorX]=T_FLOOR;
-      else tiles[doorY][gx+ROOM_W-1]=T_FLOOR;
+      for(const side of chosen){
+        if(side==='N')tiles[gy][doorX]=roomFill;
+        if(side==='S')tiles[gy+ROOM_H-1][doorX]=roomFill;
+        if(side==='W')tiles[doorY][gx]=roomFill;
+        if(side==='E')tiles[doorY][gx+ROOM_W-1]=roomFill;
+      }
     }
   }
+
   // North entry corridor
   const entryX=Math.floor(W/2);
-  for(let dy=0;dy<6;dy++) for(let dx=-2;dx<=2;dx++) tiles[BORD+dy][entryX+dx]=T_CORRIDOR;
+  for(let dy=0;dy<6;dy++) for(let dx=-2;dx<=2;dx++){
+    if(BORD+dy<H&&entryX+dx>=0&&entryX+dx<W)tiles[BORD+dy][entryX+dx]=T_CORRIDOR;
+  }
   for(let dx=-2;dx<=2;dx++) tiles[BORD-1][entryX+dx]=T_CORRIDOR;
   return finalizeZone(tiles,W,H,lootRooms,entryX,BORD,size);
 }
@@ -1107,11 +1146,28 @@ class GameRoom{
     const pool=[...this.zone.ft.indoor,...this.zone.ft.court];
     const total=20+this.day*4;
     const types=this._hordeTypesForTheme(this.zone.theme);
+    // Base spawns
     for(let i=0;i<total;i++){
       const t=this._safeTile(pool);
       if(Math.abs(t.x-this.zone.entryX)<8&&t.y<this.zone.entryY+12)continue;
       this.zombies.push(makeZombie(this.nzid++,t.x*TILE+TILE/2,t.y*TILE+TILE/2,
         types[rng(0,types.length-1)],this.day));
+    }
+    // Extra defenders near each loot room (3-5 zombies in or right outside)
+    for(const r of this.zone.lootRooms){
+      const guards=rng(3,5);
+      for(let i=0;i<guards;i++){
+        // Spawn within the room or just outside
+        const ox=rng(-2,r.w+1), oy=rng(-2,r.h+1);
+        const sx=r.x+ox, sy=r.y+oy;
+        if(sx<0||sx>=this.zone.W||sy<0||sy>=this.zone.H)continue;
+        // Don't spawn in walls
+        if(this.zone.tiles[sy][sx]===T_WALL)continue;
+        // Skip if too close to entry
+        if(Math.abs(sx-this.zone.entryX)<8&&sy<this.zone.entryY+12)continue;
+        this.zombies.push(makeZombie(this.nzid++,sx*TILE+TILE/2,sy*TILE+TILE/2,
+          types[rng(0,types.length-1)],this.day));
+      }
     }
   }
 
@@ -1413,7 +1469,10 @@ class GameRoom{
       // Decay adrenaline timer
       if(p.adrenalineTimer>0)p.adrenalineTimer--;
       const onAdrenaline=p.adrenalineTimer>0;
-      const canSprint=p.sprinting&&(p.dx||p.dy)&&(p.stamina>0||onAdrenaline);
+      // B3 fix: exhaustion lock — once stamina hits 0, can't sprint until recovered to 30%
+      if(p.stamina<=0)p.exhausted=true;
+      if(p.exhausted&&p.stamina>=p.maxStamina*0.3)p.exhausted=false;
+      const canSprint=p.sprinting&&(p.dx||p.dy)&&(onAdrenaline||(p.stamina>0&&!p.exhausted));
       const spd=canSprint?5.0:3.0;
       if(canSprint&&!onAdrenaline)p.stamina=Math.max(0,p.stamina-1.5);
       else p.stamina=Math.min(p.maxStamina,p.stamina+0.6);
@@ -1423,6 +1482,8 @@ class GameRoom{
         dxMove=(p.dx/m)*spd;dyMove=(p.dy/m)*spd;
         this._move(p,dxMove,dyMove,10);
       }
+      // B6 fix: lastVx/lastVy still used by zombie zigzag prediction, but DO NOT touch p.angle
+      // (angle is set purely from client mouse input, which is correct)
       p.lastVx=dxMove*0.4+(p.lastVx||0)*0.6;
       p.lastVy=dyMove*0.4+(p.lastVy||0)*0.6;
 
@@ -1688,16 +1749,28 @@ class GameRoom{
         }
       }
       const mag=Math.hypot(mdx,mdy)||1;mdx/=mag;mdy/=mag;
-      const probeD=TILE*0.8,probeX=z.x+mdx*probeD,probeY=z.y+mdy*probeD;
-      if(this.isSolid(Math.floor(probeX/TILE),Math.floor(probeY/TILE),true)){
-        const px=-mdy,py=mdx;
+      // B4 fix: probe at zombie radius in movement direction (catches corner clip),
+      // plus left/right side probes to detect tight passages
+      const probeD=TILE*0.8;
+      const r0=z.type==='big'?16:z.type==='runner'?9:11;
+      const fwdX=z.x+mdx*probeD, fwdY=z.y+mdy*probeD;
+      const wallFwd=this.isSolid(Math.floor(fwdX/TILE),Math.floor(fwdY/TILE),true);
+      // Check side probes — perpendicular to movement direction at zombie body radius
+      const px=-mdy, py=mdx;
+      const sideR=r0*1.2;
+      const wallL=this.isSolid(Math.floor((fwdX+px*sideR)/TILE),Math.floor((fwdY+py*sideR)/TILE),true);
+      const wallR=this.isSolid(Math.floor((fwdX-px*sideR)/TILE),Math.floor((fwdY-py*sideR)/TILE),true);
+      if(wallFwd||wallL||wallR){
+        // Try sliding along open side
         const c1=this.isSolid(Math.floor((z.x+px*probeD)/TILE),Math.floor((z.y+py*probeD)/TILE),true);
         const c2=this.isSolid(Math.floor((z.x-px*probeD)/TILE),Math.floor((z.y-py*probeD)/TILE),true);
-        if(!c1){mdx=mdx*0.3+px*0.7;mdy=mdy*0.3+py*0.7;}
+        if(!c1&&wallR){mdx=mdx*0.2+px*0.8;mdy=mdy*0.2+py*0.8;}
+        else if(!c2&&wallL){mdx=mdx*0.2-px*0.8;mdy=mdy*0.2-py*0.8;}
+        else if(!c1){mdx=mdx*0.3+px*0.7;mdy=mdy*0.3+py*0.7;}
         else if(!c2){mdx=mdx*0.3-px*0.7;mdy=mdy*0.3-py*0.7;}
         else{mdx+=(Math.random()-0.5)*0.8;mdy+=(Math.random()-0.5)*0.8;}
       }
-      const r=z.type==='big'?16:z.type==='runner'?9:11;
+      const r=r0;
       let sepX=0,sepY=0;
       for(const z2 of this.zombies){
         if(z2.id===z.id)continue;
@@ -1738,6 +1811,23 @@ class GameRoom{
       const fm=Math.hypot(mdx,mdy)||1;
       this._move(z,(mdx/fm)*z.speed,(mdy/fm)*z.speed,r);
       z.angle=Math.atan2(mdy,mdx);
+      // B4 fix: hard safeguard — if zombie center is INSIDE a wall, push out toward nearest open tile
+      const ztx=Math.floor(z.x/TILE), zty=Math.floor(z.y/TILE);
+      if(this.isSolid(ztx,zty,true)){
+        // Find nearest non-solid tile within 2 tiles
+        let bestDx=0, bestDy=0, bestD=Infinity;
+        for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
+          if(dx===0&&dy===0)continue;
+          if(!this.isSolid(ztx+dx,zty+dy,true)){
+            const d=Math.hypot(dx,dy);
+            if(d<bestD){bestD=d;bestDx=dx;bestDy=dy;}
+          }
+        }
+        if(bestD<Infinity){
+          const tx=(ztx+bestDx)*TILE+TILE/2, ty=(zty+bestDy)*TILE+TILE/2;
+          z.x=tx; z.y=ty;
+        }
+      }
       if(Math.abs(z.x-z.prevX)<0.05&&Math.abs(z.y-z.prevY)<0.05){
         z.stuckTimer++;
         if(z.stuckTimer>20){
@@ -1775,7 +1865,18 @@ class GameRoom{
           }
         }
       }
-      if(!hitObstacle&&nearDist<r+14){
+      // B1 fix: use a wider attack-engagement zone so zombies don't flip in and out of range every tick.
+      // Zombie sticks to attacking once close enough; only resets timer when they retreat well past engagement range.
+      const attackEngageR=r+18;        // when within this, attackTimer keeps building
+      const attackResetR =r+30;        // only reset attackTimer if much further away
+      // B2 fix: if zombie has overlapped into the player (rear attack stuck), push out hard
+      if(!hitObstacle && nearDist < r+9){
+        const dx=z.x-nearP.x, dy=z.y-nearP.y, dd=Math.hypot(dx,dy)||1;
+        const overlap=(r+9-dd);
+        z.x += dx/dd * overlap * 0.7;
+        z.y += dy/dd * overlap * 0.7;
+      }
+      if(!hitObstacle && nearDist < attackEngageR){
         z.attackTimer++;
         if(z.attackTimer>=z.attackRate){
           z.attackTimer=0;nearP.hp-=z.damage;
@@ -1787,7 +1888,11 @@ class GameRoom{
             io.to(this.id).emit('playerDied',{id:nearP.id,kills:nearP.kills,day:this.day,respawnIn:respawnSecs});
           }
         }
-      }else if(!hitObstacle)z.attackTimer=Math.max(0,z.attackTimer-1);
+      } else if(!hitObstacle && nearDist > attackResetR){
+        // Only reset timer when zombie clearly retreated
+        z.attackTimer=Math.max(0,z.attackTimer-1);
+      }
+      // (else: in the "buffer zone" between engage and reset — keep timer as-is, no flip-flop)
     }
   }
 
@@ -1818,20 +1923,19 @@ class GameRoom{
 
   _tickNightHorde(){
     // Escalating spawns based on night progress
+    // Higher spawn rate per user request
     const nightProgress=1-(this.nightTimer/NIGHT_TICKS);
-    const spawnRate=Math.max(8,40-Math.floor(nightProgress*32));
+    // Was: max(8, 40-32*progress). Now faster — max(5, 28-22*progress)
+    const spawnRate=Math.max(5,28-Math.floor(nightProgress*22));
     if((this._tick%spawnRate)===0){
-      const edges=[
-        {x:1,y:rng(2,BASE_H-3)},
-        {x:BASE_W-2,y:rng(2,BASE_H-3)},
-        {x:rng(2,BASE_W-3),y:1},
-        {x:rng(2,BASE_W-3),y:BASE_H-2},
-      ];
-      const e=pick(edges);
+      // All night zombies spawn from the exit corridor and swarm toward base
+      // Spread spawns across the corridor entry (x=46..50) just outside the base
+      const corridorX = BASE_LAYOUT.exitTx + rng(-2,2);
+      const corridorY = BASE_H - 1;
       const r=Math.random();
       const type=r<0.18?'runner':r<0.28?'screamer':r<0.40?'big':'normal';
       this.zombies.push(makeZombie(this.nzid++,
-        e.x*TILE+TILE/2,e.y*TILE+TILE/2,type,this.day));
+        corridorX*TILE+TILE/2, corridorY*TILE+TILE/2, type, this.day));
     }
   }
 
