@@ -26,6 +26,22 @@ Hospital generator rewritten. Rooms now sit cleanly between hallway runs, with d
 ### B8 — Hospital hallways cluttered with rooms ✅
 Same rewrite. Grid spacing tightened — clean alternating pattern of `[HALL 3w] [ROOM 7w] [HALL 3w] [ROOM 7w]` so corridors stay clear and rooms don't overlap them.
 
+## Build A also added
+
+- Terminal moved next to exit corridor (south side of base)
+- Night zombies now spawn from exit corridor only and swarm the entrance
+- Night spawn rate increased (peaks every 5 ticks vs every 8)
+- Each loot room in zones spawns 3-5 extra zombies as guards
+
+## Build B — Death system overhaul ✅
+
+- **Night/extract death = no respawn.** Player goes to spectator mode instead.
+- **Spectator mode:** camera follows a living teammate, arrow keys cycle target. T/ESC still work for chat/menu.
+- **Survivors revive spectators:** if anyone reaches morning (sleep or full night), all spectators auto-respawn for the next day.
+- **Team wipe:** if all players are dead/spectating, the run resets to Day 1 with stash and upgrades wiped.
+- **Solo lives:** solo player gets 2 lives. First death = stash wiped, upgrades preserved, advance to morning. Second death = full reset.
+- **Day deaths unchanged:** normal respawn timer (12s/9s/6s/4s based on Faster Respawn upgrade).
+
 ---
 
 ## Open bugs
@@ -35,6 +51,5 @@ Same rewrite. Grid spacing tightened — clean alternating pattern of `[HALL 3w]
 ---
 
 ## Notes
-- All 8 originally-tracked bugs are now resolved as of Build A.
-- Build B (next) will add the death system overhaul (spectator, no night respawn, all-die reset, solo lives).
+- All 8 originally-tracked bugs and the death system overhaul are complete as of Build B.
 

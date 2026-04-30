@@ -108,6 +108,53 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
   top:44px;left:auto;right:20px;transform:none;
   padding:4px 10px;font-size:10px;letter-spacing:1px;border-radius:8px;
 }
+
+/* Spectator HUD */
+#spectatorHud{
+  position:absolute;top:80px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,0.85);border:1px solid #66f;border-radius:6px;
+  padding:14px 22px;display:none;pointer-events:none;z-index:55;
+  font-family:'Courier New',monospace;text-align:center;color:#aaf;
+  min-width:280px;
+}
+#spectatorHud .specTitle{font-size:14px;color:#f44;letter-spacing:3px;font-weight:bold;margin-bottom:6px;}
+#spectatorHud .specSub{font-size:10px;color:#888;letter-spacing:1px;margin-bottom:8px;}
+#spectatorHud .specTarget{font-size:13px;color:#4af;font-weight:bold;margin:6px 0;}
+#spectatorHud .specHint{font-size:9px;color:#555;margin-top:8px;letter-spacing:1px;}
+#spectatorHud .specStatus{font-size:9px;color:#888;display:flex;gap:8px;justify-content:center;margin-top:6px;flex-wrap:wrap;}
+#spectatorHud .specStatus .alive{color:#4f4;}
+#spectatorHud .specStatus .dead{color:#666;text-decoration:line-through;}
+
+/* Game reset overlay */
+#gameResetOverlay{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  background:rgba(80,0,0,0.92);display:none;z-index:300;
+  pointer-events:none;
+  align-items:center;justify-content:center;flex-direction:column;
+  color:#f88;font-family:'Courier New',monospace;text-align:center;
+}
+#gameResetOverlay h1{font-size:36px;letter-spacing:6px;color:#f44;margin-bottom:10px;font-weight:bold;}
+#gameResetOverlay p{font-size:14px;color:#ccc;letter-spacing:2px;margin:6px 0;}
+#gameResetOverlay .reason{font-size:11px;color:#888;letter-spacing:1px;margin-top:12px;}
+
+/* Solo life lost notification */
+#soloLifeLost{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:rgba(80,30,0,0.9);border:2px solid #fa0;border-radius:8px;
+  padding:24px 40px;display:none;pointer-events:none;z-index:200;
+  color:#fa0;font-family:'Courier New',monospace;text-align:center;
+}
+#soloLifeLost h2{font-size:20px;letter-spacing:3px;color:#fa0;margin-bottom:8px;}
+#soloLifeLost p{font-size:12px;color:#ccc;letter-spacing:1px;margin:4px 0;}
+#soloLifeLost .lives{font-size:14px;color:#f44;margin-top:8px;}
+
+/* Solo lives indicator (top-left) */
+#soloLivesHud{
+  position:absolute;top:84px;left:18px;
+  background:rgba(0,0,0,0.7);border:1px solid #fa0;border-radius:4px;
+  padding:5px 10px;display:none;pointer-events:none;z-index:30;
+  font-family:'Courier New',monospace;font-size:11px;color:#fa0;letter-spacing:1px;
+}
 /* ── Kill feed top-right ── */
 #killFeed{
   position:absolute;top:60px;right:14px;width:240px;
@@ -484,6 +531,33 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
   </div>
 </div>
 <div id="hordeAlert">⚠ HORDE NIGHT ⚠<br><span style="font-size:13px;font-weight:normal">DEFEND THE BASE!</span></div>
+
+<!-- Spectator HUD -->
+<div id="spectatorHud">
+  <div class="specTitle">☠ SPECTATING ☠</div>
+  <div class="specSub">No respawn until dawn</div>
+  <div class="specTarget" id="specTargetName">—</div>
+  <div class="specStatus" id="specTeamStatus"></div>
+  <div class="specHint">← / → · Switch target &nbsp;·&nbsp; T · Chat</div>
+</div>
+
+<!-- Game reset overlay -->
+<div id="gameResetOverlay">
+  <h1>⚰ TEAM WIPED ⚰</h1>
+  <p>Run reset to Day 1</p>
+  <p>All progress lost</p>
+  <p class="reason" id="resetReason">All players died during the night</p>
+</div>
+
+<!-- Solo life lost notification -->
+<div id="soloLifeLost">
+  <h2>⚠ FIRST LIFE LOST ⚠</h2>
+  <p>Stash wiped — upgrades preserved</p>
+  <p class="lives" id="soloLivesText">1 life remaining</p>
+</div>
+
+<!-- Solo lives indicator -->
+<div id="soloLivesHud">SOLO · <span id="soloLivesCount">2</span> ❤</div>
 <div id="nightOverlay"></div>
 
 <div id="chatBox">
@@ -649,6 +723,14 @@ window.addEventListener('keydown',e=>{
     return;
   }
   if(menuOpen){if(e.key==='Escape'){toggleMenu();e.preventDefault();}return;}
+  // Spectator mode — only ESC (menu) and arrow keys to cycle target are allowed
+  if(myPlayer&&myPlayer.spectating){
+    if(e.key==='Escape'){toggleMenu();e.preventDefault();return;}
+    if(e.key==='ArrowRight'||e.key==='ArrowDown'){if(socket)socket.emit('spectateNext');e.preventDefault();return;}
+    if(e.key==='ArrowLeft' ||e.key==='ArrowUp'  ){if(socket)socket.emit('spectatePrev');e.preventDefault();return;}
+    if(e.key==='t'||e.key==='T'){openChatInput();e.preventDefault();return;}
+    e.preventDefault();return;
+  }
   keys[e.key.toLowerCase()]=true;
   if(e.key==='Escape'){toggleMenu();e.preventDefault();return;}
   if(e.key==='t'||e.key==='T'){openChatInput();e.preventDefault();return;}
@@ -722,6 +804,7 @@ document.getElementById('menuLeaveBtn').onclick=()=>{if(socket)socket.disconnect
 let lastInput={};
 function gatherInput(){
   if(!myPlayer||menuOpen||chatOpen||stashOpen||workshopOpen||isLobbyOpen())return;
+  if(myPlayer.spectating)return;
   let dx=0,dy=0;
   if(keys['a']||keys['arrowleft'])dx-=1;
   if(keys['d']||keys['arrowright'])dx+=1;
@@ -867,16 +950,46 @@ function connect(name,roomId){
     workshopData=data;
     if(workshopOpen) renderWorkshopUI();
   });
+
+  // Build B: death system events
+  socket.on('gameReset',data=>{
+    const ov=document.getElementById('gameResetOverlay');
+    document.getElementById('resetReason').textContent='Run wiped on Day '+(data.day||1);
+    ov.style.display='flex';
+    setTimeout(()=>{ov.style.display='none';},5000);
+    // Clear stash + workshop UIs in case they were open
+    closeStashUI();closeWorkshopUI();
+    // Hide spectator HUD
+    document.getElementById('spectatorHud').style.display='none';
+  });
+  socket.on('soloLifeLost',data=>{
+    const ov=document.getElementById('soloLifeLost');
+    document.getElementById('soloLivesText').textContent=
+      (data.livesRemaining||0)+' life'+(data.livesRemaining===1?'':'s')+' remaining';
+    ov.style.display='block';
+    setTimeout(()=>{ov.style.display='none';},4000);
+  });
   socket.on('playerDied',d=>{
     if(d.id===myId){
-      document.getElementById('deathScreen').style.display='flex';
-      document.getElementById('deathInfo').textContent=`Day ${d.day} · ${d.kills} total kills`;
-      document.getElementById('respawnLabel').textContent=`Respawning in ${d.respawnIn}s`;
-      startRespawnBar(d.respawnIn);
+      if(d.spectating){
+        // Build B: night death — go to spectator mode, no death screen
+        document.getElementById('deathScreen').style.display='none';
+      } else {
+        // Day death — normal respawn flow
+        document.getElementById('deathScreen').style.display='flex';
+        document.getElementById('deathInfo').textContent=`Day ${d.day} · ${d.kills} total kills`;
+        document.getElementById('respawnLabel').textContent=`Respawning in ${d.respawnIn}s`;
+        startRespawnBar(d.respawnIn);
+      }
     }
   });
   socket.on('playerRespawned',d=>{
-    if(d.id===myId){document.getElementById('deathScreen').style.display='none';mouse.left=false;lastInput={};}
+    if(d.id===myId){
+      document.getElementById('deathScreen').style.display='none';
+      document.getElementById('spectatorHud').style.display='none';
+      mouse.left=false;
+      lastInput={};
+    }
   });
   socket.on('connect_error',()=>{document.getElementById('connStatus').textContent='Connection failed — is the server running?';});
 }
@@ -964,6 +1077,43 @@ function updateScoutPanel(){
     }
   } else {
     panel.style.display='none';
+  }
+}
+
+// ─── Build B: Spectator + Solo Lives HUD ────────────────────────────────────
+function updateSpectatorHud(){
+  const hud=document.getElementById('spectatorHud');
+  if(!myPlayer||!myPlayer.spectating){
+    hud.style.display='none';
+    return;
+  }
+  hud.style.display='block';
+  // Target name
+  let targetName='—';
+  if(gameState.players){
+    const tgt=gameState.players.find(p=>p.id===myPlayer.spectateTargetId);
+    if(tgt)targetName=tgt.name;
+  }
+  document.getElementById('specTargetName').textContent='Following: '+targetName;
+  // Team status row
+  const status=document.getElementById('specTeamStatus');
+  status.innerHTML='';
+  for(const p of (gameState.players||[])){
+    const span=document.createElement('span');
+    span.className=(p.alive&&!p.spectating)?'alive':'dead';
+    span.textContent=p.name;
+    status.appendChild(span);
+  }
+}
+
+function updateSoloLivesHud(){
+  const hud=document.getElementById('soloLivesHud');
+  // Only show if solo and below max lives
+  if(gameState.isSolo&&typeof gameState.soloLives==='number'&&gameState.soloLives<2){
+    hud.style.display='block';
+    document.getElementById('soloLivesCount').textContent=gameState.soloLives;
+  } else {
+    hud.style.display='none';
   }
 }
 
@@ -1582,7 +1732,13 @@ function draw(){
   ctx.fillStyle='#0a0a0f';ctx.fillRect(0,0,W,H);
   if(!tiles||!myPlayer)return;
   pickupBob+=0.05;
-  const me=myPlayer;
+  // Spectator: follow target player
+  let cameraTarget=myPlayer;
+  if(myPlayer.spectating&&myPlayer.spectateTargetId&&gameState.players){
+    const tgt=gameState.players.find(p=>p.id===myPlayer.spectateTargetId);
+    if(tgt&&tgt.alive)cameraTarget=tgt;
+  }
+  const me=cameraTarget;
   camera.x=me.x-W/2;camera.y=me.y-H/2;
   const cx=camera.x,cy=camera.y;
 
@@ -1999,6 +2155,8 @@ function loop(){
   }
   updateBuildIndicator();
   updateScoutPanel();
+  updateSpectatorHud();
+  updateSoloLivesHud();
   // Re-render stash UI when player state changes (slots, carried resources)
   if(stashOpen) renderStashUI();
   if(workshopOpen) renderWorkshopUI();

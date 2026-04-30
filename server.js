@@ -521,6 +521,10 @@ class GameRoom{
     this.sleepAvailable=false;
     this.fightBonus={wood:0,scrap:0,ammo:0,parts:0,fullNight:false};
 
+    // Death system (Build B)
+    this.soloLives=2;          // Solo-only: 2 lives, first death = lose stash, second = full reset
+    this.gameResetPending=false;
+
     this.zone=null;
     this.scoutReport=this._rollScoutReport();
 
@@ -648,6 +652,9 @@ class GameRoom{
         faster_respawn:0,
         larger_reserves:0,
       },
+      // Spectator state (Build B)
+      spectating:false,
+      spectateTargetId:null,
     });
   }
   removePlayer(sid){this.players.delete(sid);this.flows.delete(sid);}
@@ -678,6 +685,8 @@ class GameRoom{
     if(inp.throwGrenade&&p.alive) this._tryThrowGrenade(p);
     if(inp.useToolbox&&p.alive)   this._tryUseToolbox(p);
     if(inp.useAdrenaline&&p.alive)this._tryUseAdrenaline(p);
+    if(inp.spectateNext&&p.spectating)this._spectateCycle(p,1);
+    if(inp.spectatePrev&&p.spectating)this._spectateCycle(p,-1);
   }
 
   _tryThrowGrenade(p){
@@ -1249,12 +1258,11 @@ class GameRoom{
   }
 
   _enterNight(){
-    // Players still in zone die
+    // Players still in zone die — caught by the horde
     for(const p of this.players.values()){
       if(p.alive&&!p.atBase){
-        p.hp=0;p.alive=false;p.respawnTimer=TICK*5;
-        this._dropWeaponsAtDeath(p);
-        io.to(this.id).emit('playerDied',{id:p.id,kills:p.kills,day:this.day,respawnIn:5,reason:'caught_by_night'});
+        p.hp=0;
+        this._handlePlayerDeath(p,'caught_by_night');
       }
     }
     // Unload zone
@@ -1281,6 +1289,24 @@ class GameRoom{
 
   _enterMorning(){
     this.phase='morning';this.phaseTimer=MORNING_TICKS;
+    // Build B: revive any spectators — at least one player survived to dawn
+    let revivedAny=false;
+    for(const p of this.players.values()){
+      if(p.spectating){
+        p.spectating=false;
+        p.spectateTargetId=null;
+        p.alive=true;
+        p.hp=p.maxHp;
+        p.respawnTimer=0;
+        p.x=BASE_LAYOUT.spawnTx*TILE+TILE/2+rng(-30,30);
+        p.y=BASE_LAYOUT.spawnTy*TILE+TILE/2;
+        p.atBase=true;
+        p.slots=this._freshLoadout(p);p.activeSlot=0;
+        p.exhausted=false;p.stamina=p.maxStamina;
+        revivedAny=true;
+        io.to(this.id).emit('playerRespawned',{id:p.id});
+      }
+    }
     // Distribute fight bonuses to stash
     if(this.fightBonus.wood>0)this.stash.resources.wood+=this.fightBonus.wood;
     if(this.fightBonus.scrap>0)this.stash.resources.scrap+=this.fightBonus.scrap;
@@ -1362,6 +1388,136 @@ class GameRoom{
     }
     p.slots=this._freshLoadout(p);p.activeSlot=0;
     p.wood=0;p.scrap=0;
+  }
+
+  // ── Build B: Death system ──
+  _isNightDeath(){
+    return this.phase==='night'||this.phase==='extract';
+  }
+
+  _firstLivingPlayer(excludeId){
+    for(const[sid,p]of this.players){
+      if(sid===excludeId)continue;
+      if(p.alive&&!p.spectating)return p;
+    }
+    return null;
+  }
+
+  _allPlayersDeadOrSpectating(){
+    for(const p of this.players.values()){
+      if(p.alive&&!p.spectating)return false;
+    }
+    return this.players.size>0;
+  }
+
+  _handlePlayerDeath(p,reason){
+    p.hp=0;
+    p.alive=false;
+    this._dropWeaponsAtDeath(p);
+    if(this._isNightDeath()){
+      // Night/extract death = no respawn until dawn (or game reset if all dead)
+      p.spectating=true;
+      p.respawnTimer=0;
+      // Pick a spectate target
+      const target=this._firstLivingPlayer(p.id);
+      p.spectateTargetId=target?target.id:null;
+      io.to(this.id).emit('playerDied',{
+        id:p.id, kills:p.kills, day:this.day,
+        respawnIn:0, reason:reason||'killed', spectating:true,
+      });
+      // Check if everyone is dead
+      if(this._allPlayersDeadOrSpectating()){
+        this._handleTeamWipe();
+      }
+    } else {
+      // Day death = normal respawn
+      const respawnSecs=[12,9,6,4][p.personalUpgrades?.faster_respawn||0];
+      p.respawnTimer=TICK*respawnSecs;
+      p.spectating=false;
+      io.to(this.id).emit('playerDied',{
+        id:p.id, kills:p.kills, day:this.day, respawnIn:respawnSecs, reason:reason||'killed',
+      });
+    }
+  }
+
+  _handleTeamWipe(){
+    // All players dead during night
+    const isSolo = this.players.size===1;
+    if(isSolo){
+      this.soloLives--;
+      if(this.soloLives>=1){
+        // First solo death: lose stash, keep upgrades, advance to morning
+        this.stash.weapons=[];
+        this.stash.resources={wood:0,scrap:0,parts:0,
+          pistol_ammo:0,shotgun_ammo:0,rifle_ammo:0,smg_ammo:0,medkit_count:0};
+        io.to(this.id).emit('soloLifeLost',{livesRemaining:this.soloLives});
+        // Advance to morning so player auto-respawns
+        this._enterMorning();
+        return;
+      }
+      // Out of lives — full reset
+    }
+    // Multiplayer wipe OR solo out-of-lives — full game reset
+    this._resetGame();
+  }
+
+  _resetGame(){
+    io.to(this.id).emit('gameReset',{day:this.day});
+    this.day=1;
+    this.zombies=[];this.bullets=[];this.pickups=[];this.groundWeapons=[];this.grenadesActive=[];
+    this.barricades=[];this.turrets=[];
+    this.baseBarricades=[];this.baseTurrets=[];
+    // Wipe stash
+    this.stash={
+      resources:{wood:0,scrap:0,parts:0,
+        pistol_ammo:0,shotgun_ammo:0,rifle_ammo:0,smg_ammo:0},
+      weapons:[],
+    };
+    // Wipe team upgrades
+    this.teamUpgrades={
+      stash_capacity:0, reinforced_walls:0, sentry_slot:0,
+      conversion:0, refinery:0, greenhouse:0,
+    };
+    // Reset solo lives
+    this.soloLives=2;
+    // Wipe each player
+    for(const p of this.players.values()){
+      p.alive=true;p.hp=p.maxHp;p.respawnTimer=0;
+      p.spectating=false;p.spectateTargetId=null;
+      p.wood=0;p.scrap=0;p.parts=0;
+      p.kills=0;p.sessionKills=0;
+      p.adrenalineTimer=0;p.grenades=0;p.toolboxes=0;
+      p.exhausted=false;p.stamina=p.maxStamina;
+      p.personalUpgrades={starting_gun:0,faster_respawn:0,larger_reserves:0};
+      p.slots=this._freshLoadout(p);p.activeSlot=0;
+      p.x=BASE_LAYOUT.spawnTx*TILE+TILE/2+rng(-30,30);
+      p.y=BASE_LAYOUT.spawnTy*TILE+TILE/2;
+      p.atBase=true;
+    }
+    this.zone=null;
+    this.scoutReport=this._rollScoutReport();
+    this.phase='base';
+    this.fightBonus={wood:0,scrap:0,ammo:0,parts:0,fullNight:false};
+    io.to(this.id).emit('phaseChange',{phase:'base',scoutReport:this.scoutReport,day:this.day});
+    io.to(this.id).emit('worldSwap',{
+      tiles:this.baseTiles,W:BASE_W,H:BASE_H,
+      lootRooms:[],
+      entryX:BASE_LAYOUT.exitTx,entryY:BASE_LAYOUT.exitTy,
+      kind:'base',
+    });
+  }
+
+  _spectateCycle(p,direction){
+    // direction: 1 (next) or -1 (prev)
+    const livingIds=[];
+    for(const[sid,pl]of this.players){
+      if(pl.alive&&!pl.spectating)livingIds.push(sid);
+    }
+    if(livingIds.length===0)return;
+    let idx=livingIds.indexOf(p.spectateTargetId);
+    if(idx===-1)idx=0;
+    else idx=(idx+direction+livingIds.length)%livingIds.length;
+    p.spectateTargetId=livingIds[idx];
   }
 
   _rebuildFlows(){
@@ -1882,10 +2038,7 @@ class GameRoom{
           z.attackTimer=0;nearP.hp-=z.damage;
           nearP.damageFromX=z.x;nearP.damageFromY=z.y;nearP.damageFromTimer=TICK*1.5;
           if(nearP.hp<=0){
-            const respawnSecs=[12,9,6,4][nearP.personalUpgrades?.faster_respawn||0];
-            nearP.hp=0;nearP.alive=false;nearP.respawnTimer=TICK*respawnSecs;
-            this._dropWeaponsAtDeath(nearP);
-            io.to(this.id).emit('playerDied',{id:nearP.id,kills:nearP.kills,day:this.day,respawnIn:respawnSecs});
+            this._handlePlayerDeath(nearP);
           }
         }
       } else if(!hitObstacle && nearDist > attackResetR){
@@ -1956,6 +2109,8 @@ class GameRoom{
         grenades:p.grenades||0,
         toolboxes:p.toolboxes||0,
         personalUpgrades:p.personalUpgrades||{},
+        spectating:p.spectating||false,
+        spectateTargetId:p.spectateTargetId||null,
       })),
       zombies:this.zombies.map(z=>({id:z.id,x:z.x,y:z.y,hp:z.hp,maxHp:z.maxHp,
         angle:z.angle,type:z.type,screaming:z.screaming,screamRadius:z.screamRadius||0})),
@@ -1975,6 +2130,8 @@ class GameRoom{
       stashCount:this.stash.weapons.length,
       zoneTheme:this.zone?this.zone.theme:null,
       teamUpgrades:{...this.teamUpgrades},
+      soloLives:this.soloLives,
+      isSolo:this.players.size===1,
     };
     io.to(this.id).emit('state',snap);
   }
@@ -2021,6 +2178,8 @@ io.on('connection',socket=>{
   socket.on('stashOp',op=>{if(room)room.handleInput(socket.id,{stashOp:op});});
   socket.on('openWorkshop',()=>{if(room)room.handleInput(socket.id,{openWorkshop:true});});
   socket.on('workshopOp',op=>{if(room)room.handleInput(socket.id,{workshopOp:op});});
+  socket.on('spectateNext',()=>{if(room)room.handleInput(socket.id,{spectateNext:true});});
+  socket.on('spectatePrev',()=>{if(room)room.handleInput(socket.id,{spectatePrev:true});});
   socket.on('ping',   d=>{if(room)room.handlePing(socket.id,d);});
   socket.on('chat',   m=>{if(room)room.handleChat(socket.id,m);});
   socket.on('disconnect',()=>{
