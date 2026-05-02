@@ -365,6 +365,99 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
 .oBtn.green{background:#1a4a1a;color:#8f8;} .oBtn.green:hover{background:#1e5a1e;}
 .oBtn.red{background:#4a1a1a;color:#f88;}   .oBtn.red:hover{background:#5a2020;}
 .oBtn.gray{background:#1a1a1a;color:#666;}   .oBtn.gray:hover{background:#222;}
+
+/* ─── DEAD HOURS Lobby Redesign ─────────────────────────────────────────── */
+#lobby{
+  background:linear-gradient(135deg,rgba(10,5,5,0.97) 0%,rgba(20,10,5,0.95) 50%,rgba(10,5,10,0.97) 100%);
+  gap:0;justify-content:flex-start;padding:32px 24px;overflow-y:auto;
+}
+#lobbyMain{
+  display:flex;flex-direction:column;align-items:center;
+  width:100%;max-width:1100px;gap:18px;
+}
+#lobbyTitle{
+  font-family:'Courier New',monospace;font-weight:900;
+  font-size:62px;letter-spacing:14px;color:#c33;
+  text-shadow:0 0 24px rgba(200,40,40,0.6),0 4px 0 #500,0 6px 30px rgba(0,0,0,0.9);
+  margin:8px 0 0 0;text-align:center;line-height:1;
+  animation:titlePulse 4s ease-in-out infinite;
+}
+@keyframes titlePulse{
+  0%,100%{text-shadow:0 0 24px rgba(200,40,40,0.6),0 4px 0 #500,0 6px 30px rgba(0,0,0,0.9);}
+  50%{text-shadow:0 0 36px rgba(220,60,60,0.9),0 4px 0 #500,0 6px 30px rgba(0,0,0,0.9);}
+}
+#lobbyTagline{
+  font-family:'Courier New',monospace;font-size:14px;letter-spacing:8px;color:#aaa;
+  margin:6px 0 0 0;text-transform:uppercase;
+}
+#lobbyVersion{
+  font-family:'Courier New',monospace;font-size:10px;letter-spacing:2px;color:#444;
+  margin-bottom:18px;
+}
+
+/* Join section */
+#lobbyJoin{
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  background:rgba(0,0,0,0.5);border:1px solid #2a1818;border-radius:6px;
+  padding:18px 28px;width:100%;max-width:360px;
+}
+#lobbyJoin h2{
+  font-size:11px;letter-spacing:4px;color:#a44;margin:0 0 4px 0;font-weight:bold;
+}
+
+/* Panel grid (bestiary + how-it-works side by side) */
+#lobbyPanels{
+  display:grid;grid-template-columns:1fr 1fr;gap:16px;
+  width:100%;max-width:1100px;margin-top:20px;
+}
+.lobbyPanel{
+  background:rgba(0,0,0,0.55);border:1px solid #2a1818;border-radius:6px;
+  padding:18px;color:#bbb;font-family:'Courier New',monospace;font-size:11px;line-height:1.5;
+}
+.lobbyPanel h2{
+  font-size:13px;letter-spacing:4px;color:#c33;margin:0 0 14px 0;
+  border-bottom:1px solid #401818;padding-bottom:8px;font-weight:bold;
+}
+
+/* Bestiary entries */
+.bestiaryEntry{
+  display:grid;grid-template-columns:60px 1fr;gap:12px;
+  padding:10px 0;border-bottom:1px dashed #2a1818;
+}
+.bestiaryEntry:last-child{border-bottom:none;}
+.bestiarySprite{
+  width:48px;height:48px;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(40,20,20,0.5);position:relative;
+}
+.bestiaryInfo .bName{
+  color:#fa0;font-size:12px;letter-spacing:2px;font-weight:bold;margin-bottom:3px;
+}
+.bestiaryInfo .bStats{
+  font-size:9px;color:#777;margin-bottom:4px;letter-spacing:1px;
+}
+.bestiaryInfo .bStats span{color:#aaa;margin-right:10px;}
+.bestiaryInfo .bDesc{color:#999;font-size:10px;line-height:1.4;}
+
+/* How-it-works steps */
+.howStep{
+  display:grid;grid-template-columns:28px 1fr;gap:10px;
+  padding:8px 0;border-bottom:1px dashed #2a1818;align-items:start;
+}
+.howStep:last-child{border-bottom:none;}
+.howStep .stepNum{
+  color:#c33;font-size:18px;font-weight:bold;text-align:center;line-height:1;
+}
+.howStep .stepBody .stepTitle{
+  color:#fa0;font-size:11px;letter-spacing:2px;font-weight:bold;margin-bottom:3px;
+}
+.howStep .stepBody .stepDesc{
+  color:#999;font-size:10px;line-height:1.4;
+}
+
+#lobbyFooter{
+  margin-top:24px;font-size:9px;color:#333;letter-spacing:2px;text-align:center;
+}
 .oInfo{font-size:10px;color:#333;text-align:center;line-height:2;}
 #respawnLabel{font-size:11px;color:#e44;}
 #respawnBar{width:220px;height:5px;background:#111;border-radius:3px;border:1px solid #2a1a1a;}
@@ -568,12 +661,126 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
 
 <!-- LOBBY -->
 <div class="overlay" id="lobby">
-  <h1 style="color:#4e4">🧟 ZOMBIE SURVIVAL</h1>
-  <p class="oInfo">Multiplayer · PC · Up to 6 players</p>
-  <input class="oInput" id="nameInput" placeholder="Your name" maxlength="16" autocomplete="off">
-  <input class="oInput" id="roomInput" placeholder="Room code" maxlength="20" autocomplete="off">
-  <button class="oBtn green" id="joinBtn">JOIN GAME</button>
-  <p class="oInfo" id="connStatus">Not connected</p>
+  <div id="lobbyMain">
+    <h1 id="lobbyTitle">DEAD HOURS</h1>
+    <div id="lobbyTagline">Survive the day · Outlast the night</div>
+    <div id="lobbyVersion">v3.4.0 · alpha</div>
+
+    <!-- Join section -->
+    <div id="lobbyJoin">
+      <h2>JOIN A SURVIVOR GROUP</h2>
+      <input class="oInput" id="nameInput" placeholder="Your name" maxlength="16" autocomplete="off">
+      <input class="oInput" id="roomInput" placeholder="Room code" maxlength="20" autocomplete="off">
+      <button class="oBtn green" id="joinBtn">ENTER THE WORLD</button>
+      <p class="oInfo" id="connStatus" style="font-size:10px;color:#666;margin:0">Not connected</p>
+    </div>
+
+    <!-- Bestiary + How it works -->
+    <div id="lobbyPanels">
+      <div class="lobbyPanel">
+        <h2>☠ THE INFECTED</h2>
+        <div class="bestiaryEntry">
+          <div class="bestiarySprite">
+            <svg viewBox="0 0 48 48" width="40" height="40">
+              <ellipse cx="24" cy="28" rx="9" ry="11" fill="#566040"/>
+              <circle cx="24" cy="16" r="6" fill="#7a7a48"/>
+              <circle cx="22" cy="15" r="1" fill="#400"/><circle cx="26" cy="15" r="1" fill="#400"/>
+            </svg>
+          </div>
+          <div class="bestiaryInfo">
+            <div class="bName">NORMAL</div>
+            <div class="bStats"><span>HP 47</span><span>SPD 1.2</span><span>DMG 15</span></div>
+            <div class="bDesc">The shambling baseline. Slow, predictable, but rarely alone. They make up the bulk of every horde.</div>
+          </div>
+        </div>
+        <div class="bestiaryEntry">
+          <div class="bestiarySprite">
+            <svg viewBox="0 0 48 48" width="40" height="40">
+              <ellipse cx="24" cy="30" rx="14" ry="14" fill="#7a5040"/>
+              <circle cx="24" cy="14" r="8" fill="#9a6850"/>
+              <circle cx="22" cy="13" r="1.4" fill="#400"/><circle cx="26" cy="13" r="1.4" fill="#400"/>
+            </svg>
+          </div>
+          <div class="bestiaryInfo">
+            <div class="bName">BIG</div>
+            <div class="bStats"><span>HP 128</span><span>SPD 0.7</span><span>DMG 28</span></div>
+            <div class="bDesc">A bullet sponge. Hits hard and shrugs off pistol rounds. Bring a shotgun or stay back. Common in military zones.</div>
+          </div>
+        </div>
+        <div class="bestiaryEntry">
+          <div class="bestiarySprite">
+            <svg viewBox="0 0 48 48" width="40" height="40">
+              <ellipse cx="24" cy="28" rx="7" ry="11" fill="#406070"/>
+              <circle cx="24" cy="14" r="5" fill="#608090"/>
+              <path d="M 14 28 Q 20 26 26 28" stroke="#608090" stroke-width="1.5" fill="none"/>
+              <circle cx="22" cy="13" r="1" fill="#400"/><circle cx="26" cy="13" r="1" fill="#400"/>
+            </svg>
+          </div>
+          <div class="bestiaryInfo">
+            <div class="bName">RUNNER</div>
+            <div class="bStats"><span>HP 27</span><span>SPD 2.5</span><span>DMG 10</span></div>
+            <div class="bDesc">Sprints in a zigzag pattern. Hard to hit, hard to outrun. Closes the distance fast — popular in suburb hordes.</div>
+          </div>
+        </div>
+        <div class="bestiaryEntry">
+          <div class="bestiarySprite">
+            <svg viewBox="0 0 48 48" width="40" height="40">
+              <ellipse cx="24" cy="28" rx="9" ry="11" fill="#604060"/>
+              <circle cx="24" cy="14" r="7" fill="#805080"/>
+              <ellipse cx="24" cy="16" rx="3" ry="2" fill="#200"/>
+              <path d="M 18 11 Q 24 7 30 11" stroke="#a060a0" stroke-width="1" fill="none"/>
+            </svg>
+          </div>
+          <div class="bestiaryInfo">
+            <div class="bName">SCREAMER</div>
+            <div class="bStats"><span>HP 59</span><span>SPD 0.8</span><span>DMG 12</span></div>
+            <div class="bDesc">Calls every infected within range with a piercing wail. Kill it first — the swarm it summons is the real threat.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lobbyPanel">
+        <h2>⚙ HOW IT WORKS</h2>
+        <div class="howStep">
+          <div class="stepNum">1</div>
+          <div class="stepBody">
+            <div class="stepTitle">SCOUT &amp; EXTRACT</div>
+            <div class="stepDesc">Each day a new looting zone opens — mall, hospital, military, or suburb. Read the scout report at the terminal, then enter the zone to scavenge weapons, ammo, scrap, and parts. The clock is ticking.</div>
+          </div>
+        </div>
+        <div class="howStep">
+          <div class="stepNum">2</div>
+          <div class="stepBody">
+            <div class="stepTitle">RUN BACK BEFORE DUSK</div>
+            <div class="stepDesc">When extract begins you have 30 seconds to make it back through the corridor. Anyone caught outside when night falls is locked out for the entire horde.</div>
+          </div>
+        </div>
+        <div class="howStep">
+          <div class="stepNum">3</div>
+          <div class="stepBody">
+            <div class="stepTitle">DEFEND THE BASE</div>
+            <div class="stepDesc">Build barricades, place turrets, and hold the exit corridor as the night horde swarms in. Survive 60 seconds and you can sleep through to dawn — or fight the full night for a jackpot weapon.</div>
+          </div>
+        </div>
+        <div class="howStep">
+          <div class="stepNum">4</div>
+          <div class="stepBody">
+            <div class="stepTitle">UPGRADE THE WORKSHOP</div>
+            <div class="stepDesc">Spend parts at the workshop for permanent upgrades — bigger stash, reinforced walls, sentries, faster respawn, better starting guns. Plan for the long run.</div>
+          </div>
+        </div>
+        <div class="howStep">
+          <div class="stepNum">5</div>
+          <div class="stepBody">
+            <div class="stepTitle">DEATH IS REAL AT NIGHT</div>
+            <div class="stepDesc">Day deaths respawn quickly. Night deaths drop you into spectator mode until dawn. If everyone dies during the horde, the run resets to Day 1.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="lobbyFooter">PC ONLY · UP TO 6 PLAYERS · MOUSE + KEYBOARD</div>
+  </div>
 </div>
 
 <!-- DEATH -->
