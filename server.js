@@ -14,6 +14,23 @@ const io     = new Server(server, { cors: { origin: '*' } });
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
+// Room browser endpoint — list active rooms with player counts
+app.get('/api/rooms', (req, res) => {
+  const list=[];
+  for(const[id,room]of rooms){
+    const players=Array.from(room.players.values()).map(p=>p.name||'?');
+    list.push({
+      id,
+      playerCount:room.players.size,
+      maxPlayers:6,
+      day:room.day||1,
+      phase:room.phase||'base',
+      players,
+    });
+  }
+  res.json({rooms:list});
+});
+
 const TICK=20, TILE=40;
 const T_WALL=0, T_FLOOR=1, T_COURT=2, T_BASE=3, T_LOOT=4, T_BASE_HUB=5, T_CORRIDOR=6;
 const DAY_TICKS=TICK*180, NIGHT_TICKS=TICK*135;

@@ -370,10 +370,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
 #lobby{
   background:linear-gradient(135deg,rgba(10,5,5,0.97) 0%,rgba(20,10,5,0.95) 50%,rgba(10,5,10,0.97) 100%);
   gap:0;justify-content:flex-start;padding:32px 24px;overflow-y:auto;
+  position:relative;
+}
+#lobbyBgCanvas{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  pointer-events:none;z-index:0;opacity:0.45;
 }
 #lobbyMain{
   display:flex;flex-direction:column;align-items:center;
   width:100%;max-width:1100px;gap:18px;
+  position:relative;z-index:1;
 }
 #lobbyTitle{
   font-family:'Courier New',monospace;font-weight:900;
@@ -457,6 +463,127 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
 
 #lobbyFooter{
   margin-top:24px;font-size:9px;color:#333;letter-spacing:2px;text-align:center;
+}
+
+/* Settings panel */
+#lobbySettings{
+  width:100%;max-width:1100px;margin-top:16px;
+  background:rgba(0,0,0,0.55);border:1px solid #2a1818;border-radius:6px;
+  overflow:hidden;
+}
+#lobbySettingsHeader{
+  padding:12px 18px;cursor:pointer;
+  font-family:'Courier New',monospace;font-size:13px;letter-spacing:4px;color:#c33;
+  display:flex;justify-content:space-between;align-items:center;
+  background:rgba(20,10,10,0.5);user-select:none;font-weight:bold;
+}
+#lobbySettingsHeader:hover{background:rgba(40,15,15,0.6);}
+#lobbySettingsHeader .settingsToggle{font-size:14px;color:#666;transition:transform 0.2s;}
+#lobbySettings.open #lobbySettingsHeader .settingsToggle{transform:rotate(180deg);}
+#lobbySettingsBody{
+  display:none;padding:18px;
+  font-family:'Courier New',monospace;font-size:11px;color:#aaa;
+}
+#lobbySettings.open #lobbySettingsBody{display:block;}
+.settingsRow{
+  display:grid;grid-template-columns:1fr 2fr;gap:14px;
+  padding:8px 0;border-bottom:1px dashed #2a1818;align-items:center;
+}
+.settingsRow:last-child{border-bottom:none;}
+.settingsLabel{color:#fa0;font-size:11px;letter-spacing:2px;}
+.settingsValue{color:#bbb;font-size:11px;}
+
+/* Keybind grid */
+.keybindGrid{
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 18px;
+  margin-top:6px;
+}
+.keybindGrid .kbRow{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:4px 0;font-size:10px;color:#888;
+}
+.keybindGrid .kbRow .kbKey{
+  background:rgba(40,20,20,0.5);border:1px solid #401818;border-radius:3px;
+  padding:2px 8px;color:#fa0;font-family:monospace;font-size:10px;letter-spacing:1px;
+  min-width:42px;text-align:center;
+}
+
+/* Volume slider */
+.volumeSlider{
+  -webkit-appearance:none;appearance:none;
+  width:100%;height:6px;border-radius:3px;
+  background:rgba(60,30,30,0.5);outline:none;
+}
+.volumeSlider::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:16px;height:16px;border-radius:50%;
+  background:#c33;cursor:pointer;
+}
+.volumeSlider::-moz-range-thumb{
+  width:16px;height:16px;border-radius:50%;
+  background:#c33;cursor:pointer;border:none;
+}
+.settingsNote{
+  font-size:9px;color:#555;letter-spacing:1px;font-style:italic;margin-top:10px;text-align:center;
+}
+
+/* Room browser */
+#lobbyJoin button.lobbyBrowseBtn{
+  width:100%;max-width:300px;padding:8px;
+  background:rgba(40,20,10,0.6);border:1px solid #3a2010;border-radius:5px;
+  color:#fa0;font-size:11px;font-family:monospace;cursor:pointer;letter-spacing:2px;
+  margin-top:4px;
+}
+#lobbyJoin button.lobbyBrowseBtn:hover{background:rgba(60,30,15,0.7);border-color:#5a3018;}
+#roomBrowserOverlay{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.85);display:none;z-index:120;
+  align-items:center;justify-content:center;
+}
+#roomBrowserPanel{
+  background:#100808;border:1px solid #3a1818;border-radius:8px;
+  width:100%;max-width:560px;max-height:75vh;overflow:hidden;
+  display:flex;flex-direction:column;
+  font-family:'Courier New',monospace;
+}
+#roomBrowserHeader{
+  padding:14px 18px;border-bottom:1px solid #2a1010;
+  display:flex;justify-content:space-between;align-items:center;
+  background:rgba(20,8,8,0.7);
+}
+#roomBrowserHeader h2{
+  font-size:14px;letter-spacing:4px;color:#c33;margin:0;font-weight:bold;
+}
+#roomBrowserClose{
+  background:none;border:1px solid #3a1818;color:#888;
+  padding:4px 12px;font-size:11px;cursor:pointer;border-radius:3px;font-family:monospace;
+}
+#roomBrowserClose:hover{background:#2a1010;color:#fa0;}
+#roomBrowserList{
+  overflow-y:auto;padding:14px 18px;flex:1;min-height:200px;
+}
+.roomEntry{
+  display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;
+  padding:10px 12px;background:rgba(20,10,10,0.5);border:1px solid #2a1010;border-radius:4px;
+  margin-bottom:8px;font-size:11px;color:#aaa;
+}
+.roomEntry:hover{border-color:#c33;background:rgba(40,15,15,0.6);}
+.roomEntry .rRoomId{color:#fa0;font-weight:bold;font-size:12px;letter-spacing:1px;}
+.roomEntry .rRoomMeta{font-size:9px;color:#666;margin-top:2px;}
+.roomEntry .rRoomCount{color:#aaa;font-size:11px;}
+.roomEntry .rRoomCount .full{color:#c33;}
+.roomEntry .rRoomJoinBtn{
+  background:#1a4a1a;color:#8f8;border:none;padding:5px 14px;
+  border-radius:3px;cursor:pointer;font-size:10px;font-family:monospace;letter-spacing:1px;
+}
+.roomEntry .rRoomJoinBtn:hover{background:#1e5a1e;}
+.roomEntry .rRoomJoinBtn:disabled{background:#2a2a2a;color:#666;cursor:not-allowed;}
+#roomBrowserEmpty{
+  text-align:center;padding:30px;color:#555;font-size:11px;letter-spacing:2px;
+}
+#roomBrowserFooter{
+  padding:10px 18px;border-top:1px solid #2a1010;
+  font-size:9px;color:#444;text-align:center;letter-spacing:1px;
 }
 .oInfo{font-size:10px;color:#333;text-align:center;line-height:2;}
 #respawnLabel{font-size:11px;color:#e44;}
@@ -661,10 +788,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
 
 <!-- LOBBY -->
 <div class="overlay" id="lobby">
+  <canvas id="lobbyBgCanvas"></canvas>
   <div id="lobbyMain">
     <h1 id="lobbyTitle">DEAD HOURS</h1>
     <div id="lobbyTagline">Survive the day · Outlast the night</div>
-    <div id="lobbyVersion">v3.4.0 · alpha</div>
+    <div id="lobbyVersion">v3.5.0 · alpha</div>
 
     <!-- Join section -->
     <div id="lobbyJoin">
@@ -672,6 +800,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
       <input class="oInput" id="nameInput" placeholder="Your name" maxlength="16" autocomplete="off">
       <input class="oInput" id="roomInput" placeholder="Room code" maxlength="20" autocomplete="off">
       <button class="oBtn green" id="joinBtn">ENTER THE WORLD</button>
+      <button class="lobbyBrowseBtn" id="browseRoomsBtn">BROWSE ACTIVE ROOMS</button>
       <p class="oInfo" id="connStatus" style="font-size:10px;color:#666;margin:0">Not connected</p>
     </div>
 
@@ -779,7 +908,71 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
       </div>
     </div>
 
+    <!-- Settings panel (collapsible) -->
+    <div id="lobbySettings">
+      <div id="lobbySettingsHeader">
+        <span>⚙ SETTINGS</span>
+        <span class="settingsToggle">▾</span>
+      </div>
+      <div id="lobbySettingsBody">
+        <div class="settingsRow">
+          <div class="settingsLabel">MASTER VOLUME</div>
+          <div class="settingsValue">
+            <input type="range" min="0" max="100" value="70" class="volumeSlider" id="masterVolume">
+            <span id="masterVolumeVal" style="margin-left:10px;color:#fa0">70%</span>
+          </div>
+        </div>
+        <div class="settingsRow">
+          <div class="settingsLabel">SFX VOLUME</div>
+          <div class="settingsValue">
+            <input type="range" min="0" max="100" value="80" class="volumeSlider" id="sfxVolume">
+            <span id="sfxVolumeVal" style="margin-left:10px;color:#fa0">80%</span>
+          </div>
+        </div>
+        <div class="settingsRow">
+          <div class="settingsLabel">KEYBINDS</div>
+          <div class="settingsValue">
+            <div class="keybindGrid">
+              <div class="kbRow"><span>Move</span><span class="kbKey">WASD</span></div>
+              <div class="kbRow"><span>Aim</span><span class="kbKey">MOUSE</span></div>
+              <div class="kbRow"><span>Fire</span><span class="kbKey">LMB</span></div>
+              <div class="kbRow"><span>Sprint</span><span class="kbKey">SHIFT</span></div>
+              <div class="kbRow"><span>Reload</span><span class="kbKey">R</span></div>
+              <div class="kbRow"><span>Interact</span><span class="kbKey">E</span></div>
+              <div class="kbRow"><span>Pickup</span><span class="kbKey">F</span></div>
+              <div class="kbRow"><span>Slot 1/2/3</span><span class="kbKey">1 2 3</span></div>
+              <div class="kbRow"><span>Cycle slot</span><span class="kbKey">Q</span></div>
+              <div class="kbRow"><span>Build</span><span class="kbKey">B</span></div>
+              <div class="kbRow"><span>Door</span><span class="kbKey">G</span></div>
+              <div class="kbRow"><span>Metal wall</span><span class="kbKey">M</span></div>
+              <div class="kbRow"><span>Turret</span><span class="kbKey">N</span></div>
+              <div class="kbRow"><span>Grenade</span><span class="kbKey">X</span></div>
+              <div class="kbRow"><span>Toolbox</span><span class="kbKey">C</span></div>
+              <div class="kbRow"><span>Chat</span><span class="kbKey">T</span></div>
+              <div class="kbRow"><span>Ping</span><span class="kbKey">RMB</span></div>
+              <div class="kbRow"><span>Menu</span><span class="kbKey">ESC</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="settingsNote">Audio coming in a future build · Keybinds will be customizable in a later update</div>
+      </div>
+    </div>
+
     <div id="lobbyFooter">PC ONLY · UP TO 6 PLAYERS · MOUSE + KEYBOARD</div>
+  </div>
+</div>
+
+<!-- Room Browser Modal -->
+<div id="roomBrowserOverlay">
+  <div id="roomBrowserPanel">
+    <div id="roomBrowserHeader">
+      <h2>⛓ ACTIVE SURVIVOR GROUPS</h2>
+      <button id="roomBrowserClose">CLOSE</button>
+    </div>
+    <div id="roomBrowserList">
+      <div id="roomBrowserEmpty">— NO ACTIVE ROOMS —</div>
+    </div>
+    <div id="roomBrowserFooter">CLICK A ROOM TO JOIN · UPDATES EVERY 3 SECONDS</div>
   </div>
 </div>
 
@@ -911,6 +1104,218 @@ function drawSprite(key,opts){
   return true;
 }
 loadSprites();
+
+// ─── Lobby settings panel handlers ──────────────────────────────────────────
+(function lobbySettings(){
+  const header=document.getElementById('lobbySettingsHeader');
+  const panel=document.getElementById('lobbySettings');
+  if(!header||!panel)return;
+  header.addEventListener('click',()=>{
+    panel.classList.toggle('open');
+  });
+  // Volume sliders — store in localStorage for persistence
+  function wireSlider(id,valId,storageKey,defaultVal){
+    const slider=document.getElementById(id);
+    const valEl=document.getElementById(valId);
+    if(!slider||!valEl)return;
+    // Restore saved value
+    try{
+      const saved=localStorage.getItem(storageKey);
+      if(saved!==null)slider.value=saved;
+    }catch(e){}
+    valEl.textContent=slider.value+'%';
+    slider.addEventListener('input',()=>{
+      valEl.textContent=slider.value+'%';
+      try{localStorage.setItem(storageKey,slider.value);}catch(e){}
+    });
+  }
+  wireSlider('masterVolume','masterVolumeVal','dh_masterVolume',70);
+  wireSlider('sfxVolume','sfxVolumeVal','dh_sfxVolume',80);
+})();
+
+// ─── Lobby room browser ─────────────────────────────────────────────────────
+(function roomBrowser(){
+  const openBtn=document.getElementById('browseRoomsBtn');
+  const overlay=document.getElementById('roomBrowserOverlay');
+  const closeBtn=document.getElementById('roomBrowserClose');
+  const listEl=document.getElementById('roomBrowserList');
+  if(!openBtn||!overlay||!closeBtn||!listEl)return;
+  let pollInterval=null;
+  function phaseLabel(p){
+    return({base:'AT BASE',day:'IN ZONE',extract:'EXTRACTING',night:'HORDE NIGHT',morning:'DAWN'})[p]||p||'?';
+  }
+  async function fetchRooms(){
+    try{
+      const res=await fetch('/api/rooms');
+      const data=await res.json();
+      renderRooms(data.rooms||[]);
+    }catch(e){
+      listEl.innerHTML='<div id="roomBrowserEmpty" style="color:#c33">— CONNECTION ERROR —</div>';
+    }
+  }
+  function renderRooms(rooms){
+    if(!rooms.length){
+      listEl.innerHTML='<div id="roomBrowserEmpty">— NO ACTIVE ROOMS —<br><span style="font-size:9px;color:#444;margin-top:8px;display:inline-block">Be the first. Type a room code and start a new run.</span></div>';
+      return;
+    }
+    listEl.innerHTML='';
+    for(const r of rooms){
+      const isFull=r.playerCount>=r.maxPlayers;
+      const entry=document.createElement('div');
+      entry.className='roomEntry';
+      const playersList=(r.players||[]).filter(Boolean).slice(0,3).join(', ')+
+        (r.players&&r.players.length>3?` +${r.players.length-3}`:'');
+      entry.innerHTML=`
+        <div>
+          <div class="rRoomId">${r.id}</div>
+          <div class="rRoomMeta">DAY ${r.day} · ${phaseLabel(r.phase)}${playersList?' · '+playersList:''}</div>
+        </div>
+        <div class="rRoomCount"><span class="${isFull?'full':''}">${r.playerCount}/${r.maxPlayers}</span></div>
+        <button class="rRoomJoinBtn" ${isFull?'disabled':''} data-room="${r.id}">${isFull?'FULL':'JOIN'}</button>
+      `;
+      listEl.appendChild(entry);
+    }
+    // Wire join buttons
+    for(const btn of listEl.querySelectorAll('.rRoomJoinBtn[data-room]')){
+      btn.addEventListener('click',()=>{
+        const roomId=btn.getAttribute('data-room');
+        const roomInput=document.getElementById('roomInput');
+        if(roomInput)roomInput.value=roomId;
+        closeBrowser();
+        // Trigger join click
+        const joinBtn=document.getElementById('joinBtn');
+        if(joinBtn)joinBtn.click();
+      });
+    }
+  }
+  function openBrowser(){
+    overlay.style.display='flex';
+    fetchRooms();
+    pollInterval=setInterval(fetchRooms,3000);
+  }
+  function closeBrowser(){
+    overlay.style.display='none';
+    if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
+  }
+  openBtn.addEventListener('click',openBrowser);
+  closeBtn.addEventListener('click',closeBrowser);
+  overlay.addEventListener('click',e=>{
+    if(e.target===overlay)closeBrowser();
+  });
+})();
+
+// ─── Lobby background animation ─────────────────────────────────────────────
+// Subtle moody scene: dim alley with a few zombies wandering, slow camera drift.
+(function lobbyBg(){
+  const cv=document.getElementById('lobbyBgCanvas');
+  if(!cv)return;
+  const cx=cv.getContext('2d');
+  let camDrift=0;
+  // Spawn 4-6 wandering zombies with random tiny patrols
+  const bgZombies=[];
+  const TYPES=['normal','normal','normal','runner','big','screamer'];
+  for(let i=0;i<5;i++){
+    const type=TYPES[Math.floor(Math.random()*TYPES.length)];
+    bgZombies.push({
+      x:Math.random()*1400-200,
+      y:Math.random()*900-100,
+      type,
+      dir:Math.random()*Math.PI*2,
+      changeIn:Math.random()*200+100,
+      sway:Math.random()*Math.PI*2,
+    });
+  }
+  // Scattered ambient particles (like dust/embers drifting)
+  const particles=[];
+  for(let i=0;i<35;i++){
+    particles.push({
+      x:Math.random()*1400,y:Math.random()*900,
+      vx:(Math.random()-0.5)*0.15,vy:-Math.random()*0.25-0.05,
+      life:Math.random()*200+100,
+      r:Math.random()*1.2+0.4,
+    });
+  }
+  function resize(){
+    cv.width=cv.clientWidth;cv.height=cv.clientHeight;
+  }
+  resize();window.addEventListener('resize',resize);
+  function tick(){
+    // Stop animating if lobby is hidden (saves CPU during gameplay)
+    const lobbyEl=document.getElementById('lobby');
+    if(!lobbyEl||lobbyEl.style.display==='none'){
+      requestAnimationFrame(tick);return;
+    }
+    const W=cv.width,H=cv.height;
+    if(W===0||H===0){requestAnimationFrame(tick);return;}
+    // Slow gradient sweep — like dim moonlight
+    const grad=cx.createRadialGradient(W*0.5+Math.cos(camDrift*0.001)*80,H*0.4,50,W*0.5,H*0.5,Math.max(W,H));
+    grad.addColorStop(0,'rgba(40,30,40,0.6)');
+    grad.addColorStop(0.4,'rgba(20,10,15,0.85)');
+    grad.addColorStop(1,'rgba(5,5,10,1)');
+    cx.fillStyle=grad;
+    cx.fillRect(0,0,W,H);
+    camDrift+=0.5;
+    // Draw a few "wall lines" as hint of an environment
+    cx.strokeStyle='rgba(60,40,30,0.25)';cx.lineWidth=1;
+    for(let i=0;i<6;i++){
+      const yPos=(i*H/6)+(camDrift*0.05)%(H/6);
+      cx.beginPath();cx.moveTo(0,yPos);cx.lineTo(W,yPos);cx.stroke();
+    }
+    // Floating particles (drift up like embers)
+    cx.fillStyle='rgba(180,80,40,0.35)';
+    for(const pt of particles){
+      pt.x+=pt.vx;pt.y+=pt.vy;pt.life--;
+      if(pt.life<=0||pt.y<-20){
+        pt.x=Math.random()*W;pt.y=H+10;
+        pt.life=Math.random()*200+100;
+      }
+      cx.globalAlpha=Math.min(1,pt.life/100)*0.4;
+      cx.beginPath();cx.arc(pt.x,pt.y,pt.r,0,Math.PI*2);cx.fill();
+    }
+    cx.globalAlpha=1;
+    // Wandering zombies — slow patrol
+    for(const z of bgZombies){
+      z.changeIn--;
+      if(z.changeIn<=0){
+        z.dir=Math.random()*Math.PI*2;
+        z.changeIn=Math.random()*300+150;
+      }
+      const spd=z.type==='runner'?0.6:z.type==='big'?0.2:0.35;
+      z.sway+=0.04;
+      z.x+=Math.cos(z.dir)*spd+Math.cos(z.sway)*0.1;
+      z.y+=Math.sin(z.dir)*spd+Math.sin(z.sway)*0.1;
+      // Wrap around screen with margin
+      if(z.x<-50)z.x=W+50;if(z.x>W+50)z.x=-50;
+      if(z.y<-50)z.y=H+50;if(z.y>H+50)z.y=-50;
+      // Draw — silhouette only, no detail (mood)
+      const sx=z.x,sy=z.y;
+      cx.save();
+      cx.translate(sx,sy);
+      // Long shadow
+      cx.fillStyle='rgba(0,0,0,0.4)';
+      cx.beginPath();cx.ellipse(2,16,11,3,0,0,Math.PI*2);cx.fill();
+      // Body silhouette
+      const colors={normal:'#1a1410',big:'#241410',runner:'#101618',screamer:'#1a1018'};
+      cx.fillStyle=colors[z.type]||'#1a1410';
+      const r=z.type==='big'?15:z.type==='runner'?8:11;
+      cx.beginPath();cx.ellipse(0,2,r,r*1.2,0,0,Math.PI*2);cx.fill();
+      // Head
+      cx.beginPath();cx.arc(0,-r,r*0.65,0,Math.PI*2);cx.fill();
+      // Tiny red eye glints
+      cx.fillStyle='rgba(160,30,30,0.7)';
+      cx.fillRect(-2,-r,1.2,1.2);cx.fillRect(0.8,-r,1.2,1.2);
+      cx.restore();
+    }
+    // Vignette
+    const vg=cx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.3,W/2,H/2,Math.max(W,H)*0.7);
+    vg.addColorStop(0,'rgba(0,0,0,0)');
+    vg.addColorStop(1,'rgba(0,0,0,0.7)');
+    cx.fillStyle=vg;
+    cx.fillRect(0,0,W,H);
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
 
 let baseLayout=null; // stashTx/stashTy/terminalTx/terminalTy/spawnTx/spawnTy/exitTx/exitTy/workshopTx/workshopTy
 // (mapInfo removed — base layout comes from server)
