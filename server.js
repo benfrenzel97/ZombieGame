@@ -1258,7 +1258,12 @@ class GameRoom{
   }
 
   _enterNight(){
-    // Players still in zone die — caught by the horde
+    // Set phase first so death routing knows we're in night
+    this.phase='night';
+    this.nightTimer=NIGHT_TICKS;
+    this.sleepAvailable=false;
+    this.fightBonus={wood:0,scrap:0,ammo:0,parts:0,fullNight:false};
+    // Players still in zone die — caught by the horde (now correctly routed to spectator)
     for(const p of this.players.values()){
       if(p.alive&&!p.atBase){
         p.hp=0;
@@ -1271,13 +1276,18 @@ class GameRoom{
     this.zombies=[];this.bullets=[];this.pickups=[];this.groundWeapons=[];this.grenadesActive=[];
     this.flows=new Map();
     for(const p of this.players.values()){
-      p.x=BASE_LAYOUT.spawnTx*TILE+TILE/2+rng(-30,30);
-      p.y=BASE_LAYOUT.spawnTy*TILE+TILE/2;
-      p.atBase=true;
+      // Only relocate players who weren't already inside the base.
+      // Anyone who already extracted stays right where they were.
+      if(!p.atBase){
+        p.x=BASE_LAYOUT.spawnTx*TILE+TILE/2+rng(-30,30);
+        p.y=BASE_LAYOUT.spawnTy*TILE+TILE/2;
+        p.atBase=true;
+      }
+      // Reset transient combat/movement state for everyone so the night starts cleanly
+      p.shooting=false;p.dx=0;p.dy=0;p.sprinting=false;
+      p.shootCooldown=0;p.meleeCooldown=0;
+      p.exhausted=false;p.stamina=p.maxStamina;
     }
-    this.phase='night';this.nightTimer=NIGHT_TICKS;
-    this.sleepAvailable=false;
-    this.fightBonus={wood:0,scrap:0,ammo:0,fullNight:false};
     io.to(this.id).emit('phaseChange',{phase:'night'});
     io.to(this.id).emit('worldSwap',{
       tiles:this.baseTiles,W:BASE_W,H:BASE_H,
@@ -1289,6 +1299,8 @@ class GameRoom{
 
   _enterMorning(){
     this.phase='morning';this.phaseTimer=MORNING_TICKS;
+    // Clear all hostile entities — night is over
+    this.zombies=[];this.bullets=[];this.grenadesActive=[];
     // Build B: revive any spectators — at least one player survived to dawn
     let revivedAny=false;
     for(const p of this.players.values()){
@@ -1354,9 +1366,17 @@ class GameRoom{
     this.scoutReport=this._rollScoutReport();
     for(const p of this.players.values()){
       p.hp=p.maxHp;p.alive=true;p.respawnTimer=0;
-      p.x=BASE_LAYOUT.spawnTx*TILE+TILE/2+rng(-30,30);
-      p.y=BASE_LAYOUT.spawnTy*TILE+TILE/2;
-      p.atBase=true;
+      p.exhausted=false;p.stamina=p.maxStamina;
+      // Only relocate if not already at base (e.g., a corpse waiting to revive)
+      // or if their current position is invalid (in a wall)
+      const tx=Math.floor(p.x/TILE), ty=Math.floor(p.y/TILE);
+      const inBaseTile=this.baseTiles[ty]?.[tx];
+      const inWall=(inBaseTile===undefined||inBaseTile===T_WALL);
+      if(!p.atBase||inWall){
+        p.x=BASE_LAYOUT.spawnTx*TILE+TILE/2+rng(-30,30);
+        p.y=BASE_LAYOUT.spawnTy*TILE+TILE/2;
+        p.atBase=true;
+      }
     }
     io.to(this.id).emit('phaseChange',{phase:'base',scoutReport:this.scoutReport,day:this.day});
   }
@@ -1387,12 +1407,15 @@ class GameRoom{
       }
     }
     p.slots=this._freshLoadout(p);p.activeSlot=0;
-    p.wood=0;p.scrap=0;
+    // Death penalty: lose carried resources, signature pickups, and active buffs
+    p.wood=0;p.scrap=0;p.parts=0;
+    p.grenades=0;p.toolboxes=0;
+    p.adrenalineTimer=0;
   }
 
   // ── Build B: Death system ──
   _isNightDeath(){
-    return this.phase==='night'||this.phase==='extract';
+    return this.phase==='night';
   }
 
   _firstLivingPlayer(excludeId){

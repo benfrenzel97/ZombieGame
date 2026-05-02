@@ -661,6 +661,50 @@ const NIGHT_TICKS=TICK*135;
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let socket=null,myId=null,tiles=null,lootRooms=[];
+
+// ─── Sprite assets ───────────────────────────────────────────────────────────
+const SPRITES={};
+const SPRITE_FILES={
+  pistol:'assets/guns/pistol.png',
+  smg:'assets/guns/smg.png',
+  shotgun:'assets/guns/shotgun.png',
+  rifle:'assets/guns/rifle.png',
+  grenade:'assets/guns/grenade.png',
+  ammobox:'assets/guns/ammobox.png',
+  bullet_small:'assets/guns/bullet_small.png',
+  bullet_medium:'assets/guns/bullet_medium.png',
+  bullet_large:'assets/guns/bullet_large.png',
+};
+// Target widths in canvas pixels — used to scale sprites consistently
+const SPRITE_WIDTHS={
+  pistol:24, smg:30, shotgun:40, rifle:44,
+  grenade:14, ammobox:22,
+  bullet_small:5, bullet_medium:6, bullet_large:7,
+};
+function loadSprites(){
+  for(const[key,src]of Object.entries(SPRITE_FILES)){
+    const img=new Image();
+    img.src=src;
+    SPRITES[key]=img;
+  }
+}
+function getSprite(key){
+  const img=SPRITES[key];
+  if(img&&img.complete&&img.naturalWidth>0)return img;
+  return null;
+}
+// Draw a sprite scaled to its target width, preserving aspect ratio.
+// Centered on (0,0). Caller is responsible for translate/rotate.
+function drawSprite(key,opts){
+  const img=getSprite(key);if(!img)return false;
+  const targetW=SPRITE_WIDTHS[key]||img.naturalWidth;
+  const scale=targetW/img.naturalWidth;
+  const w=img.naturalWidth*scale, h=img.naturalHeight*scale;
+  ctx.drawImage(img,-w/2,-h/2,w,h);
+  return true;
+}
+loadSprites();
+
 let baseLayout=null; // stashTx/stashTy/terminalTx/terminalTy/spawnTx/spawnTy/exitTx/exitTy/workshopTx/workshopTy
 // (mapInfo removed — base layout comes from server)
 let gameState={players:[],zombies:[],bullets:[],barricades:[],groundWeapons:[],pickups:[],
@@ -1657,10 +1701,19 @@ function drawGroundWeapon(gw,cx,cy){
     else{ctx.fillRect(-2,-18,4,20);ctx.fillRect(-6,-18,12,5);}
     ctx.restore();
   }else{
-    if(gw.type==='pistol'){ctx.fillRect(-6,-4,12,8);ctx.fillRect(2,-7,4,5);}
-    else if(gw.type==='shotgun'){ctx.fillRect(-11,-4,22,7);ctx.fillRect(-13,-2,5,4);}
-    else if(gw.type==='rifle'){ctx.fillRect(-14,-3,28,6);ctx.fillRect(-14,-6,8,4);}
-    else{ctx.fillRect(-8,-4,16,7);ctx.fillRect(-4,-7,5,4);}
+    // Try sprite first, fallback to rect
+    if(['pistol','smg','shotgun','rifle'].includes(gw.type)&&getSprite(gw.type)){
+      ctx.save();
+      // Slight tilt for visual interest
+      ctx.rotate(Math.PI/12);
+      drawSprite(gw.type);
+      ctx.restore();
+    } else {
+      if(gw.type==='pistol'){ctx.fillRect(-6,-4,12,8);ctx.fillRect(2,-7,4,5);}
+      else if(gw.type==='shotgun'){ctx.fillRect(-11,-4,22,7);ctx.fillRect(-13,-2,5,4);}
+      else if(gw.type==='rifle'){ctx.fillRect(-14,-3,28,6);ctx.fillRect(-14,-6,8,4);}
+      else{ctx.fillRect(-8,-4,16,7);ctx.fillRect(-4,-7,5,4);}
+    }
   }
   ctx.shadowBlur=0;
   ctx.fillStyle=col+'aa';ctx.font='8px monospace';ctx.textAlign='center';ctx.textBaseline='top';
@@ -1732,11 +1785,15 @@ function draw(){
   ctx.fillStyle='#0a0a0f';ctx.fillRect(0,0,W,H);
   if(!tiles||!myPlayer)return;
   pickupBob+=0.05;
-  // Spectator: follow target player
+  // Spectator: follow target player (auto-fallback if target is gone)
   let cameraTarget=myPlayer;
-  if(myPlayer.spectating&&myPlayer.spectateTargetId&&gameState.players){
-    const tgt=gameState.players.find(p=>p.id===myPlayer.spectateTargetId);
-    if(tgt&&tgt.alive)cameraTarget=tgt;
+  if(myPlayer.spectating&&gameState.players){
+    let tgt=gameState.players.find(p=>p.id===myPlayer.spectateTargetId&&p.alive&&!p.spectating);
+    if(!tgt){
+      // Target is gone or dead — pick first available living teammate
+      tgt=gameState.players.find(p=>p.id!==myId&&p.alive&&!p.spectating);
+    }
+    if(tgt)cameraTarget=tgt;
   }
   const me=cameraTarget;
   camera.x=me.x-W/2;camera.y=me.y-H/2;
@@ -1991,10 +2048,34 @@ function draw(){
   for(const pk of localPickups){
     const sx=pk.x-cx,sy=pk.y-cy+Math.sin(pickupBob+(pk.id||0)*0.3)*3;
     if(Math.abs(sx)>W+40||Math.abs(sy)>H+40)continue;
-    ctx.save();ctx.fillStyle=PCOL[pk.type]||'#fff';ctx.shadowColor=PCOL[pk.type]||'#fff';ctx.shadowBlur=pk.loot?10:6;
-    ctx.beginPath();ctx.arc(sx,sy,pk.loot?9:7,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
-    ctx.fillStyle='#000';ctx.font=`bold ${pk.loot?10:9}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(PLBL[pk.type]||'?',sx,sy);ctx.restore();
+    // Use sprites for grenade and ammo pickups
+    const isAmmo=pk.type&&pk.type.endsWith('_ammo');
+    const useGrenadeSprite=pk.type==='grenade'&&getSprite('grenade');
+    const useAmmoSprite=isAmmo&&getSprite('ammobox');
+    if(useGrenadeSprite){
+      ctx.save();
+      ctx.shadowColor=PCOL[pk.type]||'#fff';ctx.shadowBlur=pk.loot?10:6;
+      ctx.translate(sx,sy);
+      drawSprite('grenade');
+      ctx.restore();
+    } else if(useAmmoSprite){
+      ctx.save();
+      ctx.shadowColor=PCOL[pk.type]||'#fff';ctx.shadowBlur=pk.loot?10:6;
+      ctx.translate(sx,sy);
+      drawSprite('ammobox');
+      // Small letter overlay to show ammo type (P/S/R/M for pistol/shotgun/rifle/smg)
+      ctx.shadowBlur=0;
+      ctx.fillStyle='#fff';ctx.font='bold 8px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+      const letter=pk.type==='pistol_ammo'?'P':pk.type==='shotgun_ammo'?'S':pk.type==='rifle_ammo'?'R':'M';
+      ctx.fillText(letter,0,1);
+      ctx.restore();
+    } else {
+      // Fallback colored circle for medkit, wood, scrap, parts, adrenaline, toolbox
+      ctx.save();ctx.fillStyle=PCOL[pk.type]||'#fff';ctx.shadowColor=PCOL[pk.type]||'#fff';ctx.shadowBlur=pk.loot?10:6;
+      ctx.beginPath();ctx.arc(sx,sy,pk.loot?9:7,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+      ctx.fillStyle='#000';ctx.font=`bold ${pk.loot?10:9}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(PLBL[pk.type]||'?',sx,sy);ctx.restore();
+    }
   }
 
   // Particles
@@ -2024,26 +2105,54 @@ function draw(){
     if(z.type!=='normal'){ctx.fillStyle=z.type==='runner'?'#4ff':z.type==='big'?'#f84':'#f4f';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(z.type.toUpperCase(),sx,sy-r*2.5);}
   }
 
-  // Bullets
+  // Bullets — use sprites if available, fallback to colored dots
   for(const b of gameState.bullets){
-    ctx.fillStyle=b.color||'#ff9';ctx.beginPath();ctx.arc(b.x-cx,b.y-cy,3,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle=(b.color||'#ff9')+'44';ctx.beginPath();ctx.arc(b.x-cx-b.vx*0.3,b.y-cy-b.vy*0.3,2,0,Math.PI*2);ctx.fill();
+    const sx=b.x-cx, sy=b.y-cy;
+    // Pick bullet sprite by color: pistol/smg=small (yellow/magenta), shotgun=medium (orange), rifle=large (cyan)
+    let bulletKey='bullet_small';
+    if(b.color==='#fa4'||b.color==='#fa6')bulletKey='bullet_medium';
+    else if(b.color==='#4ff'||b.color==='#fc4')bulletKey='bullet_large';
+    if(getSprite(bulletKey)){
+      ctx.save();
+      ctx.translate(sx,sy);
+      // Sprite faces "up", rotate so it points in direction of travel (vy positive = down in canvas)
+      const ang=Math.atan2(b.vy,b.vx)+Math.PI/2;
+      ctx.rotate(ang);
+      drawSprite(bulletKey);
+      ctx.restore();
+    } else {
+      ctx.fillStyle=b.color||'#ff9';ctx.beginPath();ctx.arc(sx,sy,3,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=(b.color||'#ff9')+'44';ctx.beginPath();ctx.arc(sx-b.vx*0.3,sy-b.vy*0.3,2,0,Math.PI*2);ctx.fill();
+    }
   }
 
-  // Grenades — pulsing red
+  // Grenades — use sprite if available, with pulsing fuse light overlay
   if(gameState.grenades){
     for(const g of gameState.grenades){
       const sx=g.x-cx, sy=g.y-cy;
-      // Body
-      ctx.fillStyle='#444'; ctx.beginPath();
-      ctx.arc(sx,sy,5,0,Math.PI*2); ctx.fill();
-      ctx.strokeStyle='#888'; ctx.lineWidth=1; ctx.stroke();
-      // Pulsing fuse light
       const pulse=0.5+0.5*Math.abs(Math.sin(performance.now()/100));
-      ctx.fillStyle=`rgba(255,${100-pulse*70|0},${100-pulse*70|0},${0.5+pulse*0.5})`;
-      ctx.beginPath();
-      ctx.arc(sx,sy,3+pulse*2,0,Math.PI*2);
-      ctx.fill();
+      if(getSprite('grenade')){
+        ctx.save();
+        ctx.translate(sx,sy);
+        // Slow rotation for "thrown" effect
+        ctx.rotate(performance.now()/300+(g.id||0));
+        drawSprite('grenade');
+        ctx.restore();
+        // Pulsing red glow when fuse is short
+        if(g.fuse<TICK){
+          ctx.fillStyle=`rgba(255,${100-pulse*70|0},${100-pulse*70|0},${0.4+pulse*0.4})`;
+          ctx.beginPath();ctx.arc(sx,sy,8+pulse*3,0,Math.PI*2);ctx.fill();
+        }
+      } else {
+        // Fallback shape
+        ctx.fillStyle='#444'; ctx.beginPath();
+        ctx.arc(sx,sy,5,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle='#888'; ctx.lineWidth=1; ctx.stroke();
+        ctx.fillStyle=`rgba(255,${100-pulse*70|0},${100-pulse*70|0},${0.5+pulse*0.5})`;
+        ctx.beginPath();
+        ctx.arc(sx,sy,3+pulse*2,0,Math.PI*2);
+        ctx.fill();
+      }
     }
   }
 
@@ -2073,14 +2182,29 @@ function draw(){
     ctx.beginPath();ctx.ellipse(0,2,10,13,0,0,Math.PI*2);ctx.fill();
     if(p.sprinting){ctx.fillStyle='rgba(70,130,255,0.2)';ctx.beginPath();ctx.ellipse(0,8,8,6,0,0,Math.PI*2);ctx.fill();}
     ctx.fillStyle='#dda877';ctx.beginPath();ctx.arc(0,-8,7,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#555';
+    ctx.restore();
+    // Held weapon — draw in world-aligned rotation so guns point at mouse
     const w=p.slots?.[p.activeSlot];const wt=w?.type||'pistol';
+    ctx.save();ctx.translate(sx,sy);ctx.rotate(p.angle);
     if(w?.kind==='melee'){
-      ctx.fillStyle=GWCOL[wt]||'#aaf';ctx.fillRect(-2,-20,3,16);ctx.fillRect(-5,-20,10,4);
-    }else if(wt==='pistol')ctx.fillRect(-2,-19,4,14);
-    else if(wt==='shotgun'){ctx.fillRect(-4,-17,8,11);ctx.fillRect(-6,-19,12,4);}
-    else if(wt==='rifle')ctx.fillRect(-2,-23,3,18);
-    else{ctx.fillRect(-3,-18,5,13);ctx.fillRect(-2,-21,4,5);}
+      // Keep simple drawing for melee
+      ctx.fillStyle=GWCOL[wt]||'#aaf';
+      ctx.rotate(-p.angle+p.angle+Math.PI/2);
+      ctx.fillRect(-2,-20,3,16);ctx.fillRect(-5,-20,10,4);
+    } else if(['pistol','smg','shotgun','rifle'].includes(wt)&&getSprite(wt)){
+      // Offset the gun forward and slightly to the side (held in right hand)
+      const offsetX=SPRITE_WIDTHS[wt]*0.3; // muzzle extends past player body
+      const offsetY=4; // slightly below center to look "held"
+      ctx.translate(offsetX,offsetY);
+      drawSprite(wt);
+    } else {
+      // Fallback rectangles for unknown gun types
+      ctx.fillStyle='#555';
+      if(wt==='pistol')ctx.fillRect(0,-3,16,6);
+      else if(wt==='shotgun'){ctx.fillRect(0,-4,24,8);}
+      else if(wt==='rifle')ctx.fillRect(0,-3,28,6);
+      else ctx.fillRect(0,-3,18,6);
+    }
     ctx.restore();
     ctx.fillStyle=isMe?'#4af':'#a8f';ctx.font='bold 9px monospace';ctx.textAlign='center';
     ctx.fillText(p.name,sx,sy-22);
