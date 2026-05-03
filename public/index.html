@@ -109,6 +109,25 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
   padding:4px 10px;font-size:10px;letter-spacing:1px;border-radius:8px;
 }
 
+/* Stealth status HUD (top-center) */
+#stealthHud{
+  position:absolute;top:20px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,0.75);border:1px solid #2a3a2a;border-radius:14px;
+  padding:5px 16px;display:none;pointer-events:none;z-index:30;
+  font-family:'Courier New',monospace;font-size:11px;letter-spacing:3px;
+  font-weight:bold;color:#888;transition:all 0.25s ease;
+}
+#stealthHud.unseen{border-color:#284;color:#5d8;}
+#stealthHud.alerted{border-color:#a84;color:#fc4;}
+#stealthHud.chased{
+  border-color:#c33;color:#f88;
+  animation:stealthPulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes stealthPulse{
+  from{box-shadow:0 0 4px rgba(255,80,80,0.3);}
+  to{box-shadow:0 0 16px rgba(255,80,80,0.7);}
+}
+
 /* Spectator HUD */
 #spectatorHud{
   position:absolute;top:80px;left:50%;transform:translateX(-50%);
@@ -184,6 +203,55 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
 #buildIndicator .bMode{font-weight:bold;font-size:12px;}
 #buildIndicator .bSub{color:#666;font-size:9px;margin-top:2px;}
 #buildIndicator .bKeys{color:#444;font-size:9px;margin-top:3px;line-height:1.5;}
+
+/* Build menu overlay (B opens this) */
+#buildMenuOverlay{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.55);display:none;z-index:120;
+  pointer-events:auto;
+  align-items:center;justify-content:center;
+  font-family:'Courier New',monospace;
+}
+#buildMenuOverlay *{pointer-events:auto;}
+#buildMenuPanel{
+  background:rgba(15,10,10,0.95);border:1px solid #fa0;border-radius:8px;
+  padding:18px 22px;min-width:480px;max-width:600px;
+  box-shadow:0 0 32px rgba(255,170,0,0.3);
+}
+#buildMenuPanel h2{
+  font-size:14px;letter-spacing:4px;color:#fa0;margin:0 0 4px 0;text-align:center;font-weight:bold;
+}
+#buildMenuPanel .bmSubtitle{
+  font-size:10px;letter-spacing:2px;color:#666;text-align:center;margin-bottom:14px;
+}
+#buildMenuGrid{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;
+}
+.bmCard{
+  background:rgba(30,20,10,0.5);border:1px solid #3a2a18;border-radius:5px;
+  padding:12px 14px;cursor:pointer;transition:all 0.15s;
+  display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center;
+}
+.bmCard:hover{border-color:#fa0;background:rgba(50,30,15,0.6);}
+.bmCard.disabled{opacity:0.4;cursor:not-allowed;border-color:#221a10;}
+.bmCard.disabled:hover{border-color:#221a10;background:rgba(30,20,10,0.5);}
+.bmCard .bmKey{
+  font-size:18px;font-weight:bold;color:#fa0;text-align:center;
+  background:rgba(60,40,15,0.5);border-radius:4px;padding:4px 0;
+  width:36px;letter-spacing:0;
+}
+.bmCard .bmInfo .bmName{font-size:12px;letter-spacing:2px;color:#fa0;font-weight:bold;}
+.bmCard .bmInfo .bmDesc{font-size:9px;color:#888;margin-top:2px;line-height:1.3;}
+.bmCard .bmCost{font-size:10px;color:#aaa;letter-spacing:1px;}
+.bmCard .bmCost .can{color:#8f8;}
+.bmCard .bmCost .cant{color:#f88;}
+.bmCard.barricade .bmKey,.bmCard.barricade .bmName{color:#fa0;}
+.bmCard.door .bmKey,.bmCard.door .bmName{color:#4af;}
+.bmCard.metal .bmKey,.bmCard.metal .bmName{color:#aac;}
+.bmCard.turret .bmKey,.bmCard.turret .bmName{color:#f4a;}
+#buildMenuFooter{
+  font-size:9px;color:#444;letter-spacing:1px;text-align:center;border-top:1px solid #2a1810;padding-top:10px;
+}
 
 /* ── Damage indicator overlay ── */
 #dmgOverlay{
@@ -679,8 +747,52 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
 <div id="buildIndicator">
   <div class="bMode" id="buildModeName">BARRICADE</div>
   <div class="bSub" id="buildModeCost">3 wood</div>
-  <div class="bKeys">B · barricade<br>G · door<br>M · metal<br>N · turret<br>Click · place</div>
+  <div class="bKeys">Click · place &nbsp; B · menu &nbsp; ESC · cancel</div>
 </div>
+
+<!-- Build Menu Overlay (B opens this) -->
+<div id="buildMenuOverlay">
+  <div id="buildMenuPanel">
+    <h2>🔨 BUILD MENU</h2>
+    <div class="bmSubtitle">Select a structure to place</div>
+    <div id="buildMenuGrid">
+      <div class="bmCard barricade" data-build="barricade" data-key="1">
+        <div class="bmKey">1</div>
+        <div class="bmInfo">
+          <div class="bmName">BARRICADE</div>
+          <div class="bmDesc">Wooden wall, blocks zombies and bullets. Cheap and fast.</div>
+        </div>
+        <div class="bmCost" id="bmCostBarricade">3 🪵</div>
+      </div>
+      <div class="bmCard door" data-build="door" data-key="2">
+        <div class="bmKey">2</div>
+        <div class="bmInfo">
+          <div class="bmName">DOOR</div>
+          <div class="bmDesc">Toggleable. Lets teammates pass, blocks zombies when shut.</div>
+        </div>
+        <div class="bmCost" id="bmCostDoor">3 🪵</div>
+      </div>
+      <div class="bmCard metal" data-build="metal" data-key="3">
+        <div class="bmKey">3</div>
+        <div class="bmInfo">
+          <div class="bmName">METAL WALL</div>
+          <div class="bmDesc">Reinforced. Much higher HP than wood. Late-game material.</div>
+        </div>
+        <div class="bmCost" id="bmCostMetal">5 🔩</div>
+      </div>
+      <div class="bmCard turret" data-build="turret" data-key="4">
+        <div class="bmKey">4</div>
+        <div class="bmInfo">
+          <div class="bmName">TURRET</div>
+          <div class="bmDesc">Auto-fires at nearest zombie. Limited ammo, falls apart after horde.</div>
+        </div>
+        <div class="bmCost" id="bmCostTurret">8 🔩</div>
+      </div>
+    </div>
+    <div id="buildMenuFooter">1-4 · Quick select &nbsp;·&nbsp; Click a card &nbsp;·&nbsp; B / ESC · Close</div>
+  </div>
+</div>
+
 <div id="pickupPrompt"></div>
 <div id="doorPrompt">E · Toggle door</div>
 <div id="turretPrompt"></div>
@@ -752,6 +864,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
 </div>
 <div id="hordeAlert">⚠ HORDE NIGHT ⚠<br><span style="font-size:13px;font-weight:normal">DEFEND THE BASE!</span></div>
 
+<!-- Stealth status (day phase only) -->
+<div id="stealthHud">UNSEEN</div>
+
 <!-- Spectator HUD -->
 <div id="spectatorHud">
   <div class="specTitle">☠ SPECTATING ☠</div>
@@ -792,7 +907,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
   <div id="lobbyMain">
     <h1 id="lobbyTitle">DEAD HOURS</h1>
     <div id="lobbyTagline">Survive the day · Outlast the night</div>
-    <div id="lobbyVersion">v3.5.0 · alpha</div>
+    <div id="lobbyVersion">v3.8.0 · alpha</div>
 
     <!-- Join section -->
     <div id="lobbyJoin">
@@ -942,10 +1057,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
               <div class="kbRow"><span>Pickup</span><span class="kbKey">F</span></div>
               <div class="kbRow"><span>Slot 1/2/3</span><span class="kbKey">1 2 3</span></div>
               <div class="kbRow"><span>Cycle slot</span><span class="kbKey">Q</span></div>
-              <div class="kbRow"><span>Build</span><span class="kbKey">B</span></div>
-              <div class="kbRow"><span>Door</span><span class="kbKey">G</span></div>
-              <div class="kbRow"><span>Metal wall</span><span class="kbKey">M</span></div>
-              <div class="kbRow"><span>Turret</span><span class="kbKey">N</span></div>
+              <div class="kbRow"><span>Build menu</span><span class="kbKey">B</span></div>
+              <div class="kbRow"><span>Quick: door</span><span class="kbKey">G</span></div>
+              <div class="kbRow"><span>Quick: metal</span><span class="kbKey">M</span></div>
+              <div class="kbRow"><span>Quick: turret</span><span class="kbKey">N</span></div>
               <div class="kbRow"><span>Grenade</span><span class="kbKey">X</span></div>
               <div class="kbRow"><span>Toolbox</span><span class="kbKey">C</span></div>
               <div class="kbRow"><span>Chat</span><span class="kbKey">T</span></div>
@@ -1330,6 +1445,7 @@ let toolboxFX=[]; // {x,y,r,maxR,life}
 let myPlayer=null;
 let menuOpen=false,chatOpen=false;
 let buildMode=null; // null, 'barricade', 'door', 'metal', 'turret'
+let buildMenuOpen=false;
 let stashOpen=false;       // is stash UI overlay visible
 let stashData=null;        // last received stash snapshot
 let workshopOpen=false;    // is workshop UI overlay visible
@@ -1378,6 +1494,18 @@ window.addEventListener('keydown',e=>{
     }
     return;
   }
+  // Build menu — only build-menu keys allowed while open
+  if(buildMenuOpen){
+    if(e.key==='Escape'||e.key==='b'||e.key==='B'){
+      closeBuildMenu();
+      e.preventDefault();return;
+    }
+    if(e.key==='1'){selectBuildFromMenu('barricade');e.preventDefault();return;}
+    if(e.key==='2'){selectBuildFromMenu('door');e.preventDefault();return;}
+    if(e.key==='3'){selectBuildFromMenu('metal');e.preventDefault();return;}
+    if(e.key==='4'){selectBuildFromMenu('turret');e.preventDefault();return;}
+    e.preventDefault();return;
+  }
   if(menuOpen){if(e.key==='Escape'){toggleMenu();e.preventDefault();}return;}
   // Spectator mode — only ESC (menu) and arrow keys to cycle target are allowed
   if(myPlayer&&myPlayer.spectating){
@@ -1396,17 +1524,24 @@ window.addEventListener('keydown',e=>{
   if(e.key==='3')sendSelectSlot(2);
   if(e.key==='f'||e.key==='F'){if(socket)socket.emit('pickup');}
   if(e.key==='e'||e.key==='E'){if(socket)socket.emit('interact');}
-  if(e.key==='b'||e.key==='B'){buildMode=buildMode==='barricade'?null:'barricade';}
-  if(e.key==='g'||e.key==='G'){buildMode=buildMode==='door'?null:'door';}
-  if(e.key==='m'||e.key==='M'){buildMode=buildMode==='metal'?null:'metal';}
-  if(e.key==='n'||e.key==='N'){buildMode=buildMode==='turret'?null:'turret';}
+  // Build menu — B opens selector, ESC closes
+  if(e.key==='b'||e.key==='B'){
+    if(buildMenuOpen){closeBuildMenu();}
+    else if(buildMode){buildMode=null;updateBuildIndicator();}
+    else{openBuildMenu();}
+    e.preventDefault();return;
+  }
+  // Legacy quick-shortcuts (still work for muscle memory)
+  if(e.key==='g'||e.key==='G'){buildMode=buildMode==='door'?null:'door';updateBuildIndicator();}
+  if(e.key==='m'||e.key==='M'){buildMode=buildMode==='metal'?null:'metal';updateBuildIndicator();}
+  if(e.key==='n'||e.key==='N'){buildMode=buildMode==='turret'?null:'turret';updateBuildIndicator();}
   if(e.key==='r'||e.key==='R'){if(socket)socket.emit('input',{...lastInput,reloadReq:true});}
   if(e.key==='x'||e.key==='X'){if(socket)socket.emit('throwGrenade');}
   if(e.key==='c'||e.key==='C'){if(socket)socket.emit('useToolbox');}
   e.preventDefault();
 });
 window.addEventListener('keyup',e=>{
-  if(isLobbyOpen()||menuOpen||stashOpen||workshopOpen)return;
+  if(isLobbyOpen()||menuOpen||stashOpen||workshopOpen||buildMenuOpen)return;
   keys[e.key.toLowerCase()]=false;
 });
 canvas.addEventListener('mousemove',e=>{
@@ -1459,7 +1594,7 @@ document.getElementById('menuLeaveBtn').onclick=()=>{if(socket)socket.disconnect
 // ─── Input gathering ──────────────────────────────────────────────────────────
 let lastInput={};
 function gatherInput(){
-  if(!myPlayer||menuOpen||chatOpen||stashOpen||workshopOpen||isLobbyOpen())return;
+  if(!myPlayer||menuOpen||chatOpen||stashOpen||workshopOpen||buildMenuOpen||isLobbyOpen())return;
   if(myPlayer.spectating)return;
   let dx=0,dy=0;
   if(keys['a']||keys['arrowleft'])dx-=1;
@@ -1734,6 +1869,23 @@ function updateScoutPanel(){
   } else {
     panel.style.display='none';
   }
+}
+
+// ─── Stealth status HUD (day phase only) ────────────────────────────────────
+function updateStealthHud(){
+  const hud=document.getElementById('stealthHud');
+  if(!hud)return;
+  if(!myPlayer||myPlayer.spectating){hud.style.display='none';return;}
+  // Only show during day/extract phases
+  const ph=gameState.phase;
+  if(ph!=='day'&&ph!=='extract'){hud.style.display='none';return;}
+  const status=myPlayer.stealthStatus||'unseen';
+  hud.style.display='block';
+  hud.classList.remove('unseen','alerted','chased');
+  hud.classList.add(status);
+  if(status==='chased')hud.textContent='⚠ CHASED ⚠';
+  else if(status==='alerted')hud.textContent='? ALERTED ?';
+  else hud.textContent='● UNSEEN';
 }
 
 // ─── Build B: Spectator + Solo Lives HUD ────────────────────────────────────
@@ -2044,6 +2196,59 @@ function updateBuildIndicator(){
   document.getElementById('buildModeName').textContent=m.name;
   document.getElementById('buildModeCost').textContent=m.cost;
 }
+
+// ─── Build menu (B opens this) ───────────────────────────────────────────────
+function openBuildMenu(){
+  buildMenuOpen=true;
+  document.getElementById('buildMenuOverlay').style.display='flex';
+  document.getElementById('gameCanvas').style.cursor='default';
+  document.getElementById('gameCanvas').style.pointerEvents='none';
+  refreshBuildMenuAffordability();
+}
+function closeBuildMenu(){
+  buildMenuOpen=false;
+  document.getElementById('buildMenuOverlay').style.display='none';
+  document.getElementById('gameCanvas').style.cursor='none';
+  document.getElementById('gameCanvas').style.pointerEvents='auto';
+}
+function selectBuildFromMenu(kind){
+  buildMode=kind;
+  closeBuildMenu();
+  updateBuildIndicator();
+}
+function refreshBuildMenuAffordability(){
+  if(!myPlayer)return;
+  const wood=myPlayer.wood||0, scrap=myPlayer.scrap||0;
+  const checks={
+    barricade:{cost:3,have:wood,unit:'🪵'},
+    door:{cost:3,have:wood,unit:'🪵'},
+    metal:{cost:5,have:scrap,unit:'🔩'},
+    turret:{cost:8,have:scrap,unit:'🔩'},
+  };
+  for(const[kind,info]of Object.entries(checks)){
+    const card=document.querySelector(`.bmCard[data-build="${kind}"]`);
+    if(!card)continue;
+    const can=info.have>=info.cost;
+    card.classList.toggle('disabled',!can);
+    const costEl=card.querySelector('.bmCost');
+    if(costEl)costEl.innerHTML=`<span class="${can?'can':'cant'}">${info.cost} ${info.unit}</span>`;
+  }
+}
+// Wire card clicks once on load (DOM is parsed by the time this runs since script is at end of body)
+(function wireBuildMenuCards(){
+  const overlay=document.getElementById('buildMenuOverlay');
+  if(!overlay)return;
+  for(const card of document.querySelectorAll('.bmCard[data-build]')){
+    card.addEventListener('click',()=>{
+      if(card.classList.contains('disabled'))return;
+      selectBuildFromMenu(card.getAttribute('data-build'));
+    });
+  }
+  // Click outside panel closes it
+  overlay.addEventListener('click',e=>{
+    if(e.target===overlay)closeBuildMenu();
+  });
+})();
 
 // ─── Lighting ─────────────────────────────────────────────────────────────────
 function updateLighting(){
@@ -2708,13 +2913,39 @@ function draw(){
     const r=z.type==='big'?16:z.type==='runner'?8:11;
     ctx.save();ctx.translate(sx,sy);ctx.rotate(z.angle+Math.PI/2);
     if(z.screaming){ctx.shadowColor='#f0f';ctx.shadowBlur=14;}
+    // State-based glow
+    else if(z.aiState==='chasing'){ctx.shadowColor='#f44';ctx.shadowBlur=10;}
+    else if(z.aiState==='alerted'||z.alerted){ctx.shadowColor='#fc4';ctx.shadowBlur=8;}
     ctx.fillStyle=ZCOL[z.type]||ZCOL.normal;ctx.beginPath();ctx.ellipse(0,2,r,r*1.3,0,0,Math.PI*2);ctx.fill();
     ctx.fillStyle=ZHCOL[z.type]||ZHCOL.normal;ctx.beginPath();ctx.arc(0,-r*0.75,r*0.6,0,Math.PI*2);ctx.fill();
-    ctx.shadowBlur=0;ctx.fillStyle=z.type==='runner'?'#0ff':'#f00';
+    ctx.shadowBlur=0;
+    // Eye color by state — dim when idle, bright red when chasing, yellow when alerted
+    let eyeCol;
+    if(z.aiState==='idle')eyeCol='rgba(120,30,30,0.5)';
+    else if(z.aiState==='alerted')eyeCol='#fc4';
+    else eyeCol=z.type==='runner'?'#0ff':'#f00';
+    ctx.fillStyle=eyeCol;
     ctx.beginPath();ctx.arc(-r*0.28,-r*0.85,2,0,Math.PI*2);ctx.arc(r*0.28,-r*0.85,2,0,Math.PI*2);ctx.fill();
     ctx.restore();
     if(z.hp<z.maxHp){const bw=r*2.8;ctx.fillStyle='#100';ctx.fillRect(sx-bw/2,sy-r*2.2,bw,4);ctx.fillStyle='#e44';ctx.fillRect(sx-bw/2,sy-r*2.2,bw*(z.hp/z.maxHp),4);}
     if(z.type!=='normal'){ctx.fillStyle=z.type==='runner'?'#4ff':z.type==='big'?'#f84':'#f4f';ctx.font='8px monospace';ctx.textAlign='center';ctx.fillText(z.type.toUpperCase(),sx,sy-r*2.5);}
+    // State icon above head
+    if(z.aiState==='idle'){
+      // Sleepy "z" indicator
+      ctx.fillStyle='rgba(150,150,180,0.5)';
+      ctx.font='9px monospace';ctx.textAlign='center';ctx.textBaseline='alphabetic';
+      ctx.fillText('z',sx,sy-r*1.8);
+    } else if(z.aiState==='alerted'||z.alerted){
+      const blink=0.6+0.4*Math.abs(Math.sin(performance.now()/180));
+      ctx.fillStyle=`rgba(255,200,80,${blink})`;
+      ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.textBaseline='alphabetic';
+      ctx.fillText('?',sx,sy-r*2.0);
+    } else if(z.aiState==='chasing'){
+      const blink=0.7+0.3*Math.abs(Math.sin(performance.now()/120));
+      ctx.fillStyle=`rgba(255,80,80,${blink})`;
+      ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.textBaseline='alphabetic';
+      ctx.fillText('!',sx,sy-r*2.0);
+    }
   }
 
   // Bullets — use sprites if available, fallback to colored dots
@@ -2893,9 +3124,11 @@ function loop(){
   updateScoutPanel();
   updateSpectatorHud();
   updateSoloLivesHud();
+  updateStealthHud();
   // Re-render stash UI when player state changes (slots, carried resources)
   if(stashOpen) renderStashUI();
   if(workshopOpen) renderWorkshopUI();
+  if(buildMenuOpen) refreshBuildMenuAffordability();
   draw();
   requestAnimationFrame(loop);
 }

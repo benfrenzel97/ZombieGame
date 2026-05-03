@@ -481,11 +481,20 @@ function makeZombie(id,x,y,type,day){
   const d=D[type]||D.normal;
   return{id,x,y,type,hp:d.hp,maxHp:d.hp,
     speed:d.spd+(Math.random()-0.5)*0.15,
-    damage:d.dmg,attackRate:d.rate,angle:0,attackTimer:0,
+    damage:d.dmg,attackRate:d.rate,angle:Math.random()*Math.PI*2,attackTimer:0,
     screaming:false,screamTimer:rng(40,120),screamRadius:0,
     stuckTimer:0,prevX:x,prevY:y,
     knockbackVx:0,knockbackVy:0,
-    zigzagPhase:Math.random()*Math.PI*2,_alertTimer:0};
+    zigzagPhase:Math.random()*Math.PI*2,_alertTimer:0,
+    // Stealth state machine (day-only)
+    aiState:'idle',                        // 'idle' | 'alerted' | 'chasing'
+    investigateX:null, investigateY:null,  // last known target position when alerted
+    investigateLook:0,                     // ticks left to "look around" at investigate point
+    wanderDir:Math.random()*Math.PI*2,     // current wander direction
+    wanderChange:rng(80,140),              // ticks until next direction change
+    wanderPause:0,                         // ticks left of paused wander
+    chaseTargetId:null,                    // which player they're locked onto
+  };
 }
 
 // ─── Game Room ───────────────────────────────────────────────────────────────
@@ -590,6 +599,72 @@ class GameRoom{
       }
     }
     return false;
+  }
+
+  // ─── Stealth helpers (day phase) ──────────────────────────────────────────
+  // Bresenham-style ray cast through tile grid, returns true if no wall blocks LOS.
+  hasLineOfSight(x1,y1,x2,y2){
+    const t1x=Math.floor(x1/TILE), t1y=Math.floor(y1/TILE);
+    const t2x=Math.floor(x2/TILE), t2y=Math.floor(y2/TILE);
+    const dx=Math.abs(t2x-t1x), dy=Math.abs(t2y-t1y);
+    let x=t1x, y=t1y;
+    const sx=t1x<t2x?1:-1, sy=t1y<t2y?1:-1;
+    let err=dx-dy;
+    let steps=0;
+    while(steps<60){  // safety cap
+      if(x===t2x&&y===t2y)return true;
+      // Don't count the start tile; check current as potential wall (but ignore doors so closed doors block LOS too — actually we want walls only for vision)
+      if(!(x===t1x&&y===t1y)){
+        const w=this._activeWorld();
+        if(x<0||x>=w.W||y<0||y>=w.H)return false;
+        if(w.tiles[y][x]===T_WALL)return false;
+        // Closed barricades/doors also block sight
+        for(const bar of this._allBarricades()){
+          if(bar.tx===x&&bar.ty===y&&!(bar.isDoor&&bar.isOpen))return false;
+        }
+      }
+      const e2=2*err;
+      if(e2>-dy){err-=dy;x+=sx;}
+      if(e2< dx){err+=dx;y+=sy;}
+      steps++;
+    }
+    return false;
+  }
+
+  // Returns the closest player visible to this zombie (in cone, in range, in LOS), or null.
+  zombieDayVision(z){
+    const VISION_RANGE=250;
+    const VISION_HALF_ANGLE=Math.PI/4;  // 90° cone (45° each side)
+    let best=null, bestD=Infinity;
+    for(const p of this.players.values()){
+      if(!p.alive||p.spectating)continue;
+      const dx=p.x-z.x, dy=p.y-z.y, dd=Math.hypot(dx,dy);
+      if(dd>VISION_RANGE)continue;
+      // Cone check: angle between zombie facing and player direction
+      const playerAng=Math.atan2(dy,dx);
+      let diff=playerAng-z.angle;
+      while(diff>Math.PI)diff-=2*Math.PI;
+      while(diff<-Math.PI)diff+=2*Math.PI;
+      if(Math.abs(diff)>VISION_HALF_ANGLE)continue;
+      // Line of sight check
+      if(!this.hasLineOfSight(z.x,z.y,p.x,p.y))continue;
+      if(dd<bestD){bestD=dd;best=p;}
+    }
+    return best;
+  }
+
+  // Detect by sound: closest player whose sound radius reaches this zombie.
+  zombieHearing(z){
+    let best=null, bestD=Infinity;
+    for(const p of this.players.values()){
+      if(!p.alive||p.spectating)continue;
+      const dd=Math.hypot(p.x-z.x,p.y-z.y);
+      // Walking radius 80px, sprinting 280px
+      const soundRadius=p.sprinting&&(p.dx||p.dy)?280:((p.dx||p.dy)?80:0);
+      if(soundRadius<=0)continue;
+      if(dd<=soundRadius&&dd<bestD){bestD=dd;best=p;}
+    }
+    return best;
   }
 
   _barricadeAt(wx,wy,r=12){
@@ -1711,7 +1786,8 @@ class GameRoom{
               this.bullets.push({x:p.x,y:p.y,vx:Math.cos(ang)*wd.bSpeed,vy:Math.sin(ang)*wd.bSpeed,
                 life:wd.bLife,damage:wd.damage,owner:sid,color:wd.color});
             }
-            this.gunshots.push({x:p.x,y:p.y,life:1});
+            // Extend life so zombies have a chance to react (decays over ~6 ticks)
+            this.gunshots.push({x:p.x,y:p.y,life:6,type:slot.type});
             if(slot.mag===0&&slot.reserve>0){p.reloading=true;p.reloadMax=wd.reload;p.reloadTimer=wd.reload;}
           }
         }else if(slot.kind==='melee'){
@@ -1921,6 +1997,7 @@ class GameRoom{
   }
 
   _tickZombies(){
+    const isDayPhase=(this.phase==='day'||this.phase==='extract');
     for(const z of this.zombies){
       if(z.knockbackVx||z.knockbackVy){
         this._move(z,z.knockbackVx,z.knockbackVy,z.type==='big'?16:11);
@@ -1928,21 +2005,126 @@ class GameRoom{
         if(Math.abs(z.knockbackVx)<0.05)z.knockbackVx=0;
         if(Math.abs(z.knockbackVy)<0.05)z.knockbackVy=0;
       }
-      const[fdx,fdy,nearP,nearDist]=this._getFlow(z);
-      if(!nearP)continue;
-      let mdx=fdx,mdy=fdy;
-      if(nearDist<80){
-        if(z.type==='runner'){
-          z.zigzagPhase+=0.18;
-          const leadDist=clamp(nearDist*0.3,0,40);
-          const targetX=nearP.x+(nearP.lastVx||0)*leadDist*0.3;
-          const targetY=nearP.y+(nearP.lastVy||0)*leadDist*0.3;
-          const tdx=targetX-z.x,tdy=targetY-z.y,td=Math.hypot(tdx,tdy)||1;
-          const perp=Math.sin(z.zigzagPhase)*0.6;
-          mdx=tdx/td-tdy/td*perp;mdy=tdy/td+tdx/td*perp;
-        }else{
-          mdx=(nearP.x-z.x)/nearDist;mdy=(nearP.y-z.y)/nearDist;
+      // ─── DAY PHASE: stealth state machine ────────────────────────────────
+      // Detect any player by sight or sound (sets state)
+      let mdx=0, mdy=0, nearP=null, nearDist=Infinity;
+      if(isDayPhase){
+        const seen=this.zombieDayVision(z);     // closest player visible in cone
+        const heard=this.zombieHearing(z);      // closest player making sound
+        // Sight has priority over sound when picking chase target
+        const detected=seen||heard;
+        if(seen){
+          // Lock onto seen player → CHASING
+          z.aiState='chasing';
+          z.chaseTargetId=seen.id;
+          z.investigateX=seen.x;z.investigateY=seen.y;
+          z.investigateLook=0;
+        } else if(heard){
+          // Heard something but didn't see → ALERTED, investigate
+          if(z.aiState!=='chasing'){
+            z.aiState='alerted';
+            z.investigateX=heard.x;z.investigateY=heard.y;
+            z.investigateLook=0;
+          } else {
+            // Already chasing — refresh investigate point with new sound location
+            z.investigateX=heard.x;z.investigateY=heard.y;
+          }
+        } else {
+          // No detection this tick. Check if we should drop chase.
+          if(z.aiState==='chasing'){
+            // Lost sight — downgrade to alerted, head to last known spot
+            z.aiState='alerted';
+          }
         }
+        // Movement based on state
+        if(z.aiState==='chasing'){
+          // Chase the locked target if still alive, else nearest visible player
+          let tgt=null;
+          for(const p of this.players.values()){
+            if(p.id===z.chaseTargetId&&p.alive&&!p.spectating){tgt=p;break;}
+          }
+          if(!tgt){
+            // Target gone — drop to alerted with last known investigate point
+            z.aiState='alerted';
+          } else {
+            mdx=tgt.x-z.x;mdy=tgt.y-z.y;
+            nearP=tgt;nearDist=Math.hypot(mdx,mdy)||1;
+            mdx/=nearDist;mdy/=nearDist;
+            // Runner zigzag (preserve existing behavior at close range)
+            if(z.type==='runner'&&nearDist<80){
+              z.zigzagPhase+=0.18;
+              const perp=Math.sin(z.zigzagPhase)*0.6;
+              const ox=mdx;mdx=mdx-mdy*perp;mdy=mdy+ox*perp;
+              const m=Math.hypot(mdx,mdy)||1;mdx/=m;mdy/=m;
+            }
+            z.investigateX=tgt.x;z.investigateY=tgt.y;
+          }
+        }
+        if(z.aiState==='alerted'){
+          // Walk to last known position. When arrived, "look around" then revert.
+          if(z.investigateX==null){
+            z.aiState='idle';
+          } else {
+            const dx=z.investigateX-z.x, dy=z.investigateY-z.y, dd=Math.hypot(dx,dy);
+            if(dd>30){
+              mdx=dx/dd;mdy=dy/dd;
+              z.investigateLook=0;
+            } else {
+              // Arrived. Look around (rotate slowly) for ~2.5s
+              if(z.investigateLook===0)z.investigateLook=TICK*Math.floor(rng(20,30)/10);
+              z.investigateLook--;
+              // Slow scan: rotate angle gradually
+              z.angle+=0.04;
+              if(z.investigateLook<=0){
+                z.aiState='idle';
+                z.investigateX=null;z.investigateY=null;
+              }
+              continue;  // No movement during look-around
+            }
+          }
+        }
+        if(z.aiState==='idle'){
+          // Wander slowly with occasional pauses
+          if(z.wanderPause>0){
+            z.wanderPause--;
+            // Slow rotation while paused (looking around)
+            z.angle+=0.015;
+            continue;  // Stationary
+          }
+          z.wanderChange--;
+          if(z.wanderChange<=0){
+            z.wanderDir=Math.random()*Math.PI*2;
+            z.wanderChange=rng(80,140);
+            // 25% chance to pause for 1-3 seconds instead of moving
+            if(Math.random()<0.25){
+              z.wanderPause=rng(20,60);
+              continue;
+            }
+          }
+          mdx=Math.cos(z.wanderDir);
+          mdy=Math.sin(z.wanderDir);
+        }
+      } else {
+        // ─── NIGHT/OTHER: original auto-see-all behavior via flow field ───
+        const[fdx,fdy,np,nd]=this._getFlow(z);
+        if(!np)continue;
+        nearP=np;nearDist=nd;
+        mdx=fdx;mdy=fdy;
+        if(nearDist<80){
+          if(z.type==='runner'){
+            z.zigzagPhase+=0.18;
+            const leadDist=clamp(nearDist*0.3,0,40);
+            const targetX=nearP.x+(nearP.lastVx||0)*leadDist*0.3;
+            const targetY=nearP.y+(nearP.lastVy||0)*leadDist*0.3;
+            const tdx=targetX-z.x,tdy=targetY-z.y,td=Math.hypot(tdx,tdy)||1;
+            const perp=Math.sin(z.zigzagPhase)*0.6;
+            mdx=tdx/td-tdy/td*perp;mdy=tdy/td+tdx/td*perp;
+          }else{
+            mdx=(nearP.x-z.x)/nearDist;mdy=(nearP.y-z.y)/nearDist;
+          }
+        }
+        // Always-chasing during night
+        z.aiState='chasing';
       }
       const mag=Math.hypot(mdx,mdy)||1;mdx/=mag;mdy/=mag;
       // B4 fix: probe at zombie radius in movement direction (catches corner clip),
@@ -1967,13 +2149,28 @@ class GameRoom{
         else{mdx+=(Math.random()-0.5)*0.8;mdy+=(Math.random()-0.5)*0.8;}
       }
       const r=r0;
+      // ─── Separation force (anti-blob) ──────────────────────────────────────
+      // Zombies push apart from each other so they don't stack into a single mass.
       let sepX=0,sepY=0;
       for(const z2 of this.zombies){
         if(z2.id===z.id)continue;
         const dx=z.x-z2.x,dy=z.y-z2.y,dd=Math.hypot(dx,dy)||1;
-        const minSep=(r+(z2.type==='big'?16:10))*1.1;
-        if(dd<minSep){sepX+=dx/dd*(minSep-dd)*0.08;sepY+=dy/dd*(minSep-dd)*0.08;}
+        const r2=z2.type==='big'?16:z2.type==='runner'?9:11;
+        const minSep=(r+r2)*1.3;  // wider separation buffer
+        if(dd<minSep){
+          // Soft push when overlapping
+          const overlap=(minSep-dd)/minSep;
+          const force=overlap*0.55;  // stronger than before (was 0.08)
+          sepX+=dx/dd*force;
+          sepY+=dy/dd*force;
+          // Hard anti-stack: if very close, push extra to prevent perfect overlap
+          if(dd<(r+r2)*0.7){
+            sepX+=dx/dd*0.4;
+            sepY+=dy/dd*0.4;
+          }
+        }
       }
+      // Player separation (don't pile on the player when they're already in attack range)
       for(const p of this.players.values()){
         if(!p.alive)continue;
         const dx=z.x-p.x,dy=z.y-p.y,dd=Math.hypot(dx,dy)||1;
@@ -1984,6 +2181,7 @@ class GameRoom{
         }
       }
       mdx+=sepX;mdy+=sepY;
+      // ─── Screamer special ──
       if(z.type==='screamer'){
         z.screamTimer--;
         if(z.screamTimer<=0){
@@ -1994,18 +2192,54 @@ class GameRoom{
           io.to(this.id).emit('screamerPulse',{x:z.x,y:z.y});
         }else{z.screaming=false;z.screamRadius=0;}
       }
+      // ─── Gunshot reaction (alert state) ───────────────────────────────────
+      // Decay alert timer. Find best gunshot to react to.
       if(z._alertTimer>0)z._alertTimer--;
-      if(this.gunshots.length>0&&nearDist>200&&Math.random()<0.65){
-        const gs=this.gunshots[this.gunshots.length-1];
-        if(Math.hypot(z.x-gs.x,z.y-gs.y)<400){
-          z._alertTimer=TICK*5;
-          const ax=gs.x-z.x,ay=gs.y-z.y,ad=Math.hypot(ax,ay)||1;
-          mdx=mdx*0.3+ax/ad*0.7;mdy=mdy*0.3+ay/ad*0.7;
+      else{z._alertTargetX=null;z._alertTargetY=null;}
+      // Per-gun-type alert range — louder guns = farther reach
+      const gunRange={pistol:300,smg:340,shotgun:420,rifle:500};
+      // Scan ALL recent gunshots, pick the closest one this zombie could hear
+      let bestGs=null,bestGsDist=Infinity;
+      for(const gs of this.gunshots){
+        const range=gunRange[gs.type]||320;
+        const d=Math.hypot(z.x-gs.x,z.y-gs.y);
+        if(d<range&&d<bestGsDist){bestGs=gs;bestGsDist=d;}
+      }
+      if(bestGs){
+        const closenessFactor=Math.min(1,nearDist===Infinity?1:nearDist/250);
+        const alertTicks=Math.floor(TICK*4*closenessFactor + TICK*1);
+        if(z._alertTimer<alertTicks){
+          z._alertTimer=alertTicks;
+          z._alertTargetX=bestGs.x;
+          z._alertTargetY=bestGs.y;
+        }
+        // During day phase, gunshots also wake idle zombies into alerted state
+        if(isDayPhase&&z.aiState==='idle'){
+          z.aiState='alerted';
+          z.investigateX=bestGs.x;z.investigateY=bestGs.y;
+          z.investigateLook=0;
+        }
+      }
+      // Apply alert bias if active (only meaningful when zombie has a chase target)
+      if(z._alertTimer>0&&z._alertTargetX!=null&&nearP){
+        const ax=z._alertTargetX-z.x,ay=z._alertTargetY-z.y,ad=Math.hypot(ax,ay)||1;
+        const pullStrength=0.6*(z._alertTimer/(TICK*4));
+        if(nearDist>180){
+          mdx=mdx*(1-pullStrength)+(ax/ad)*pullStrength;
+          mdy=mdy*(1-pullStrength)+(ay/ad)*pullStrength;
+        } else {
+          mdx+=(ax/ad)*0.15;
+          mdy+=(ay/ad)*0.15;
         }
       }
       z.prevX=z.x;z.prevY=z.y;
       const fm=Math.hypot(mdx,mdy)||1;
-      this._move(z,(mdx/fm)*z.speed,(mdy/fm)*z.speed,r);
+      // Speed multiplier based on AI state
+      // Idle = slow wander, Alerted = brisk investigate, Chasing = full speed
+      let speedMult=1.0;
+      if(z.aiState==='idle')speedMult=0.4;
+      else if(z.aiState==='alerted')speedMult=0.7;
+      this._move(z,(mdx/fm)*z.speed*speedMult,(mdy/fm)*z.speed*speedMult,r);
       z.angle=Math.atan2(mdy,mdx);
       // B4 fix: hard safeguard — if zombie center is INSIDE a wall, push out toward nearest open tile
       const ztx=Math.floor(z.x/TILE), zty=Math.floor(z.y/TILE);
@@ -2066,24 +2300,27 @@ class GameRoom{
       const attackEngageR=r+18;        // when within this, attackTimer keeps building
       const attackResetR =r+30;        // only reset attackTimer if much further away
       // B2 fix: if zombie has overlapped into the player (rear attack stuck), push out hard
-      if(!hitObstacle && nearDist < r+9){
-        const dx=z.x-nearP.x, dy=z.y-nearP.y, dd=Math.hypot(dx,dy)||1;
-        const overlap=(r+9-dd);
-        z.x += dx/dd * overlap * 0.7;
-        z.y += dy/dd * overlap * 0.7;
-      }
-      if(!hitObstacle && nearDist < attackEngageR){
-        z.attackTimer++;
-        if(z.attackTimer>=z.attackRate){
-          z.attackTimer=0;nearP.hp-=z.damage;
-          nearP.damageFromX=z.x;nearP.damageFromY=z.y;nearP.damageFromTimer=TICK*1.5;
-          if(nearP.hp<=0){
-            this._handlePlayerDeath(nearP);
-          }
+      // Only run combat code if zombie has a target player (not idle/wandering)
+      if(nearP){
+        if(!hitObstacle && nearDist < r+9){
+          const dx=z.x-nearP.x, dy=z.y-nearP.y, dd=Math.hypot(dx,dy)||1;
+          const overlap=(r+9-dd);
+          z.x += dx/dd * overlap * 0.7;
+          z.y += dy/dd * overlap * 0.7;
         }
-      } else if(!hitObstacle && nearDist > attackResetR){
-        // Only reset timer when zombie clearly retreated
-        z.attackTimer=Math.max(0,z.attackTimer-1);
+        if(!hitObstacle && nearDist < attackEngageR){
+          z.attackTimer++;
+          if(z.attackTimer>=z.attackRate){
+            z.attackTimer=0;nearP.hp-=z.damage;
+            nearP.damageFromX=z.x;nearP.damageFromY=z.y;nearP.damageFromTimer=TICK*1.5;
+            if(nearP.hp<=0){
+              this._handlePlayerDeath(nearP);
+            }
+          }
+        } else if(!hitObstacle && nearDist > attackResetR){
+          // Only reset timer when zombie clearly retreated
+          z.attackTimer=Math.max(0,z.attackTimer-1);
+        }
       }
       // (else: in the "buffer zone" between engage and reset — keep timer as-is, no flip-flop)
     }
@@ -2133,6 +2370,30 @@ class GameRoom{
   }
 
   _broadcast(){
+    // Pre-compute per-player stealth status (worst state of any zombie targeting them)
+    const stealthByPid=new Map();
+    const isDayPhase=(this.phase==='day'||this.phase==='extract');
+    if(isDayPhase){
+      for(const p of this.players.values()){stealthByPid.set(p.id,'unseen');}
+      for(const z of this.zombies){
+        if(z.aiState==='chasing'&&z.chaseTargetId){
+          stealthByPid.set(z.chaseTargetId,'chased');
+        } else if(z.aiState==='alerted'){
+          // Find the player nearest to investigate point — they're the "alerted target"
+          if(z.investigateX!=null){
+            let bestId=null,bestD=Infinity;
+            for(const p of this.players.values()){
+              if(!p.alive)continue;
+              const d=Math.hypot(p.x-z.investigateX,p.y-z.investigateY);
+              if(d<400&&d<bestD){bestD=d;bestId=p.id;}
+            }
+            if(bestId&&stealthByPid.get(bestId)!=='chased'){
+              stealthByPid.set(bestId,'alerted');
+            }
+          }
+        }
+      }
+    }
     const snap={
       players:Array.from(this.players.values()).map(p=>({
         id:p.id,name:p.name,x:p.x,y:p.y,angle:p.angle,hp:p.hp,maxHp:p.maxHp,
@@ -2151,9 +2412,12 @@ class GameRoom{
         personalUpgrades:p.personalUpgrades||{},
         spectating:p.spectating||false,
         spectateTargetId:p.spectateTargetId||null,
+        stealthStatus:stealthByPid.get(p.id)||null,
       })),
       zombies:this.zombies.map(z=>({id:z.id,x:z.x,y:z.y,hp:z.hp,maxHp:z.maxHp,
-        angle:z.angle,type:z.type,screaming:z.screaming,screamRadius:z.screamRadius||0})),
+        angle:z.angle,type:z.type,screaming:z.screaming,screamRadius:z.screamRadius||0,
+        alerted:(z._alertTimer||0)>0,
+        aiState:z.aiState||'chasing'})),
       bullets:this.bullets.map(b=>({x:b.x,y:b.y,vx:b.vx,vy:b.vy,color:b.color})),
       barricades:this._allBarricades(),
       turrets:this._allTurrets(),
