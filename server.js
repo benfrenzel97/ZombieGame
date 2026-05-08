@@ -1345,8 +1345,14 @@ class GameRoom{
   }
 
   _enterExtract(){
-    this.phase='extract';this.phaseTimer=EXTRACT_TICKS;
-    io.to(this.id).emit('phaseChange',{phase:'extract'});
+    // Extract timer scales with zone size: small=20s, medium=30s, large=45s
+    let secs=30;
+    if(this.zone&&this.zone.size){
+      if(this.zone.size==='small')secs=20;
+      else if(this.zone.size==='large')secs=45;
+    }
+    this.phase='extract';this.phaseTimer=TICK*secs;
+    io.to(this.id).emit('phaseChange',{phase:'extract',extractSecs:secs});
   }
 
   _enterNight(){
@@ -2433,6 +2439,9 @@ class GameRoom{
       stashSize:this._stashSize(),
       stashCount:this.stash.weapons.length,
       zoneTheme:this.zone?this.zone.theme:null,
+      zoneEntryX:this.zone?(this.zone.entryX*TILE+TILE/2):null,
+      zoneEntryY:this.zone?((this.zone.entryY-1)*TILE+TILE/2):null,
+      zoneSize:this.zone?this.zone.size:null,
       teamUpgrades:{...this.teamUpgrades},
       soloLives:this.soloLives,
       isSolo:this.players.size===1,

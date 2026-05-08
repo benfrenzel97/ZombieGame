@@ -907,7 +907,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0f;font-family:
   <div id="lobbyMain">
     <h1 id="lobbyTitle">DEAD HOURS</h1>
     <div id="lobbyTagline">Survive the day · Outlast the night</div>
-    <div id="lobbyVersion">v3.8.0 · alpha</div>
+    <div id="lobbyVersion">v3.10.0 · alpha</div>
 
     <!-- Join section -->
     <div id="lobbyJoin">
@@ -1189,12 +1189,14 @@ const SPRITE_FILES={
   bullet_small:'assets/guns/bullet_small.png',
   bullet_medium:'assets/guns/bullet_medium.png',
   bullet_large:'assets/guns/bullet_large.png',
+  player_soldier:'assets/players/soldier_topdown.png',
 };
 // Target widths in canvas pixels — used to scale sprites consistently
 const SPRITE_WIDTHS={
   pistol:24, smg:30, shotgun:40, rifle:44,
   grenade:14, ammobox:22,
   bullet_small:5, bullet_medium:6, bullet_large:7,
+  player_soldier:32,
 };
 function loadSprites(){
   for(const[key,src]of Object.entries(SPRITE_FILES)){
@@ -3014,41 +3016,107 @@ function draw(){
     m.life--;return m.life>0;
   });
 
+  // Extract marker — visible only during extract phase
+  if(gameState.phase==='extract'&&gameState.zoneEntryX!=null&&gameState.zoneEntryY!=null){
+    const ex=gameState.zoneEntryX-cx, ey=gameState.zoneEntryY-cy;
+    const pulse=0.5+0.5*Math.abs(Math.sin(performance.now()/280));
+    // If off-screen, draw an edge arrow pointing toward it
+    const margin=40;
+    const onScreen=(ex>-30&&ex<W+30&&ey>-30&&ey<H+30);
+    if(!onScreen){
+      // Compute arrow position clamped to screen edge
+      const cxs=W/2,cys=H/2;
+      const dx=ex-cxs, dy=ey-cys;
+      const ang=Math.atan2(dy,dx);
+      // Find intersection of ray from screen center to a margin-inset rectangle
+      const halfW=W/2-margin, halfH=H/2-margin;
+      let tx=Math.cos(ang), ty=Math.sin(ang);
+      const t=Math.min(halfW/Math.abs(tx||0.001), halfH/Math.abs(ty||0.001));
+      const ax=cxs+tx*t, ay=cys+ty*t;
+      ctx.save();
+      ctx.translate(ax,ay);ctx.rotate(ang);
+      // Glow pulse
+      ctx.shadowColor='#4f8';ctx.shadowBlur=14*pulse+8;
+      ctx.fillStyle=`rgba(80,255,140,${0.7+0.3*pulse})`;
+      ctx.beginPath();
+      ctx.moveTo(18,0);ctx.lineTo(-12,-12);ctx.lineTo(-6,0);ctx.lineTo(-12,12);ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur=0;
+      // Distance text
+      const dist=Math.round(Math.hypot(gameState.zoneEntryX-(myPlayer?myPlayer.x:0),gameState.zoneEntryY-(myPlayer?myPlayer.y:0))/TILE);
+      ctx.rotate(-ang);
+      ctx.fillStyle='#5fb';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(`EXIT ${dist}`,0,-22);
+      ctx.restore();
+    } else {
+      // On-screen beacon: pulsing green circle + label
+      ctx.save();
+      ctx.shadowColor='#4f8';ctx.shadowBlur=20+8*pulse;
+      // Outer ring
+      ctx.strokeStyle=`rgba(80,255,140,${0.6+0.3*pulse})`;
+      ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(ex,ey,28+4*pulse,0,Math.PI*2);ctx.stroke();
+      // Inner solid
+      ctx.fillStyle=`rgba(80,255,140,${0.3+0.2*pulse})`;
+      ctx.beginPath();ctx.arc(ex,ey,18,0,Math.PI*2);ctx.fill();
+      ctx.shadowBlur=0;
+      // Up-arrow icon (pointing to corridor)
+      ctx.fillStyle='#dfe';
+      ctx.beginPath();
+      ctx.moveTo(ex,ey-9);ctx.lineTo(ex-7,ey+4);ctx.lineTo(ex-3,ey+4);
+      ctx.lineTo(ex-3,ey+9);ctx.lineTo(ex+3,ey+9);ctx.lineTo(ex+3,ey+4);
+      ctx.lineTo(ex+7,ey+4);ctx.closePath();
+      ctx.fill();
+      // Label
+      ctx.fillStyle='#5fb';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='top';
+      ctx.fillText('EXIT',ex,ey+18);
+      ctx.restore();
+    }
+  }
+
   // Players
   for(const p of gameState.players){
     if(!p.alive)continue;
     const sx=p.x-cx,sy=p.y-cy;
     if(Math.abs(sx)>W+60||Math.abs(sy)>H+60)continue;
     const isMe=p.id===myId;
-    ctx.save();ctx.translate(sx,sy);ctx.rotate(p.angle+Math.PI/2);
-    ctx.fillStyle=isMe?'#1e55a0':'#5a22aa';
-    ctx.beginPath();ctx.ellipse(0,2,10,13,0,0,Math.PI*2);ctx.fill();
-    if(p.sprinting){ctx.fillStyle='rgba(70,130,255,0.2)';ctx.beginPath();ctx.ellipse(0,8,8,6,0,0,Math.PI*2);ctx.fill();}
-    ctx.fillStyle='#dda877';ctx.beginPath();ctx.arc(0,-8,7,0,Math.PI*2);ctx.fill();
-    ctx.restore();
-    // Held weapon — draw in world-aligned rotation so guns point at mouse
     const w=p.slots?.[p.activeSlot];const wt=w?.type||'pistol';
-    ctx.save();ctx.translate(sx,sy);ctx.rotate(p.angle);
-    if(w?.kind==='melee'){
-      // Keep simple drawing for melee
-      ctx.fillStyle=GWCOL[wt]||'#aaf';
-      ctx.rotate(-p.angle+p.angle+Math.PI/2);
-      ctx.fillRect(-2,-20,3,16);ctx.fillRect(-5,-20,10,4);
-    } else if(['pistol','smg','shotgun','rifle'].includes(wt)&&getSprite(wt)){
-      // Offset the gun forward and slightly to the side (held in right hand)
-      const offsetX=SPRITE_WIDTHS[wt]*0.3; // muzzle extends past player body
-      const offsetY=4; // slightly below center to look "held"
-      ctx.translate(offsetX,offsetY);
-      drawSprite(wt);
+    const playerSprite=getSprite('player_soldier');
+    if(playerSprite){
+      // Sprite faces "up" (rifle pointing up, head at bottom of sprite).
+      // Rotate by angle + PI/2 so rifle points toward mouse.
+      ctx.save();
+      ctx.translate(sx,sy);
+      ctx.rotate(p.angle+Math.PI/2);
+      // Optional sprint trail glow
+      if(p.sprinting){
+        ctx.fillStyle='rgba(70,130,255,0.15)';
+        ctx.beginPath();ctx.ellipse(0,8,9,7,0,0,Math.PI*2);ctx.fill();
+      }
+      // Tint own player slightly blue, others slightly purple, applied via shadow color
+      ctx.shadowColor=isMe?'rgba(70,130,255,0.7)':'rgba(160,90,200,0.5)';
+      ctx.shadowBlur=isMe?10:6;
+      drawSprite('player_soldier');
+      ctx.shadowBlur=0;
+      ctx.restore();
+      // Melee weapon overlay (sprite has rifle baked in, but if player swaps to melee, draw blade on top)
+      if(w?.kind==='melee'){
+        ctx.save();
+        ctx.translate(sx,sy);
+        ctx.rotate(p.angle);
+        ctx.fillStyle=GWCOL[wt]||'#aaf';
+        ctx.fillRect(8,-2,14,4);   // blade extending forward
+        ctx.fillRect(6,-3,4,6);    // hilt
+        ctx.restore();
+      }
     } else {
-      // Fallback rectangles for unknown gun types
-      ctx.fillStyle='#555';
-      if(wt==='pistol')ctx.fillRect(0,-3,16,6);
-      else if(wt==='shotgun'){ctx.fillRect(0,-4,24,8);}
-      else if(wt==='rifle')ctx.fillRect(0,-3,28,6);
-      else ctx.fillRect(0,-3,18,6);
+      // Fallback (shouldn't normally hit — sprite always loaded)
+      ctx.save();ctx.translate(sx,sy);ctx.rotate(p.angle+Math.PI/2);
+      ctx.fillStyle=isMe?'#1e55a0':'#5a22aa';
+      ctx.beginPath();ctx.ellipse(0,2,10,13,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#dda877';ctx.beginPath();ctx.arc(0,-8,7,0,Math.PI*2);ctx.fill();
+      ctx.restore();
     }
-    ctx.restore();
     ctx.fillStyle=isMe?'#4af':'#a8f';ctx.font='bold 9px monospace';ctx.textAlign='center';
     ctx.fillText(p.name,sx,sy-22);
     if(!isMe&&p.hp<p.maxHp){ctx.fillStyle='#100';ctx.fillRect(sx-18,sy-28,36,4);ctx.fillStyle='#4e4';ctx.fillRect(sx-18,sy-28,36*(p.hp/p.maxHp),4);}
